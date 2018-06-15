@@ -1,0 +1,74 @@
+---
+title: "SingleCellExperiment QC"
+author: "Kieran R Campbell"
+output:
+  html_document: 
+    toc: true
+    toc_float: true
+  html_notebook: default
+params:
+  input_sce_path: path_to_sce.rds
+  output_sce_path: path_to_sce.rds
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      cache = FALSE)
+
+suppressPackageStartupMessages({
+  library(scater)
+  library(SingleCellExperiment)
+})
+```
+
+Read in the data:
+
+```{r}
+sce <- readRDS(params$input_sce_path)
+print(sce)
+```
+
+# Reduced dimension plots
+
+Run PCA first:
+
+```{r}
+sce <- runPCA(sce, ncomponents = 3)
+```
+
+PCA plots:
+
+```{r}
+plotPCA(sce, colour_by = "total_features")
+plotPCA(sce, colour_by = "pct_counts_mito")
+plotPCA(sce, colour_by = "pct_counts_ribo")
+```
+
+
+```{r}
+plotPhenoData(sce, x = "total_features", y = "pct_counts_mito")
+plotPhenoData(sce, x = "total_features", y = "total_counts")
+```
+
+Number of cells to retain:
+
+```{r}
+cells_to_keep <- sce$total_features > 2000 & sce$pct_counts_mito < 15
+table(cells_to_keep)
+```
+
+```{r}
+sce <- sce[,cells_to_keep]
+print(sce)
+```
+
+And save to file:
+
+```{r}
+saveRDS(sce, params$output_sce_path)
+```
+
+
+
+
+

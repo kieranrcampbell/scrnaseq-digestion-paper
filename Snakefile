@@ -1,9 +1,10 @@
+import pandas as pd
+import os
+
 
 configfile: "config.yaml"
-
 files10X = ['barcodes.tsv', 'genes.tsv', 'matrix.mtx']
 
-import pandas as pd
 
 df_inventory = pd.read_csv(config['sample_inventory_url']).dropna()
 df_inventory.index = df_inventory['id']
@@ -13,11 +14,13 @@ ids = list(inventory_dict.keys())
 
 raw_files = expand("data/raw_10X/{id}/{file}", id=ids, file=files10X)
 scesets_raw = expand("data/scesets/{id}_sceset_raw.rds", id=ids)
+scesets_qc = expand("data/scesets/{id}_sceset_qc.rds", id=ids)
 
 rule all:
     input:
         raw_files,
-        scesets_raw
+        scesets_raw,
+        scesets_qc
 
 rule get_from_shahlab:
     params:
@@ -56,11 +59,23 @@ rule convert_to_sce:
         --digestion_temperature {params.digestion_temperature} \
         --tissue_state {params.tissue_state} \
         --enzyme_mix {params.enzyme_mix} \
-        --jira_ticket {params.jira_ticket} \
+        --jira_ticket '{params.jira_ticket}' \
         --cell_status {params.cell_status} \
         --genome {params.genome}"
 
-
+rule qc_scesets:
+    params:
+        curr_dir = os.getcwd()
+    input:
+        "data/scesets/{id}_sceset_raw.rds"
+    output:
+        sce="data/scesets/{id}_sceset_qc.rds",
+        report="reports/qc/qc_report_{id}.html"
+    shell:
+        "Rscript -e \"rmarkdown::render('pipeline/qc/sce_qc.Rmd', \
+        output_file='{params.curr_dir}/{output.report}', knit_root_dir='{params.curr_dir}', \
+        params=list(input_sce_path='{input}', output_sce_path='{output.sce}'))\" "
+        
         
     
 

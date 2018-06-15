@@ -19,28 +19,6 @@ read_sce <- function(input_data_path = "input",
 
   sce <- read10XResults(input_data_path)
 
-  rowData(sce)$ensembl_gene_id <- rownames(sce)
-  
-  sce <- getBMFeatureAnnos(sce, filters = "ensembl_gene_id",
-  attributes = c("ensembl_gene_id", "hgnc_symbol", "entrezgene",
-  "start_position", "end_position", "chromosome_name"),
-  dataset = "hsapiens_gene_ensembl")
-
-  
-  # Get Mitochondrial genes for QC:
-  mt_genes <- which(rowData(sce)$chromosome_name == "MT")
-  ribo_genes <- grepl("^RP[LS]", rowData(sce)$Symbol)
-  feature_ctrls <- list(mito = rownames(sce)[mt_genes],
-                        ribo = rownames(sce)[ribo_genes])
-  
-  # Calculate QC metrics
-  sce <- calculateQCMetrics(sce, feature_controls = feature_ctrls)
-  
-  # Calculate size factors (using TMM - open to debate)
-  sce <- scran::computeSumFactors(sce)
-  
-  # Compute log normal expression values
-  sce <- normalize(sce)
   
   # Add in all the sample data
   sce$id <- id
@@ -51,8 +29,35 @@ read_sce <- function(input_data_path = "input",
   sce$digestion_temperature <- digestion_temperature
   sce$tissue_state <- tissue_state
   sce$enzyme_mix <- enzyme_mix
+  sce$jira_ticket <- jira_ticket
   sce$cell_status <- cell_status
   sce$genome <- genome
+
+  rowData(sce)$ensembl_gene_id <- rownames(sce)
+  
+  sce <- getBMFeatureAnnos(sce, filters = "ensembl_gene_id",
+  attributes = c("ensembl_gene_id", "hgnc_symbol", "entrezgene",
+  "start_position", "end_position", "chromosome_name"),
+  dataset = "hsapiens_gene_ensembl")
+
+  
+  # Calculate size factors (using TMM - open to debate)
+  sce <- scran::computeSumFactors(sce)
+  
+  
+  # Compute log normal expression values
+  sce <- normalize(sce)
+  
+  # Get Mitochondrial genes for QC:
+  mt_genes <- which(rowData(sce)$chromosome_name == "MT")
+  ribo_genes <- grepl("^RP[LS]", rowData(sce)$Symbol)
+  feature_ctrls <- list(mito = rownames(sce)[mt_genes],
+                        ribo = rownames(sce)[ribo_genes])
+  
+  # Calculate QC metrics
+  sce <- calculateQCMetrics(sce, feature_controls = feature_ctrls)
+  
+
   
   # Make sure colnames are unique
   colnames(sce) <- paste0(id, "_", sce$Barcode)
