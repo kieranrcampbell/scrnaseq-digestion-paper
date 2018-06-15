@@ -1,0 +1,1 @@
+docker run -t -v /batchfx/:/batchfx/ statgen snakemake -n -s /batchfx/Snakefile --directory /batchfx

@@ -30,16 +30,35 @@ rule get_from_shahlab:
 
 rule convert_to_sce:
     params:
-
+        sample_id=lambda wildcards: inventory_dict[wildcards.id]['sample_id'],
+        batch_id=lambda wildcards: inventory_dict[wildcards.id]['batch_id'],
+        sample_type=lambda wildcards: inventory_dict[wildcards.id]['sample_type'],
+        cancer_type=lambda wildcards: inventory_dict[wildcards.id]['cancer_type'],
+        digestion_temperature=lambda wildcards: inventory_dict[wildcards.id]['digestion_temperature'],
+        tissue_state=lambda wildcards: inventory_dict[wildcards.id]['tissue_state'],
+        enzyme_mix=lambda wildcards: inventory_dict[wildcards.id]['enzyme_mix'],
+        jira_ticket=lambda wildcards: inventory_dict[wildcards.id]['jira_ticket'],
+        cell_status=lambda wildcards: inventory_dict[wildcards.id]['cell_status'],
+        genome=lambda wildcards: inventory_dict[wildcards.id]['genome']
     input:
         expand("data/raw_10X/{{id}}/{file}", file=files10X)
     output:
         "data/scesets/{id}_sceset_raw.rds"
     shell:
         "Rscript pipeline/conversion_to_sceset/convert_to_sceset.R \
-        --input_data_path data/raw10X/{wildcards.id} \
+        --input_data_path data/raw_10X/{wildcards.id}/ \
         --output_scepath {output} \
-        --sample_id"
+        --id {wildcards.id} \
+        --sample_id {params.sample_id} \
+        --batch_id {params.batch_id} \
+        --sample_type {params.sample_type} \
+        --cancer_type {params.cancer_type} \
+        --digestion_temperature {params.digestion_temperature} \
+        --tissue_state {params.tissue_state} \
+        --enzyme_mix {params.enzyme_mix} \
+        --jira_ticket {params.jira_ticket} \
+        --cell_status {params.cell_status} \
+        --genome {params.genome}"
 
 
         

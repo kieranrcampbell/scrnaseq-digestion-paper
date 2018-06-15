@@ -2,6 +2,7 @@ library(SingleCellExperiment)
 library(aargh)
 library(scater)
 
+
 read_sce <- function(input_data_path = "input",
                      output_scepath = "output",
                      id = "id",
@@ -12,7 +13,8 @@ read_sce <- function(input_data_path = "input",
                      digestion_temperature = "digestion_temp",
                      tissue_state = "tissue_state",
                      enzyme_mix = "enzyme_mix",
-                     shahlab_path = "shahlab_path",
+                     jira_ticket = "jira_ticket",
+                     cell_status = "cell_status",
                      genome = "genome") {
 
   sce <- read10XResults(input_data_path)
@@ -20,7 +22,7 @@ read_sce <- function(input_data_path = "input",
   rowData(sce)$ensembl_gene_id <- rownames(sce)
   
   sce <- getBMFeatureAnnos(sce, filters = "ensembl_gene_id",
-  attributes = c("ensembl_gene_id", "hgnc_symbol_symbol", "entrezgene",
+  attributes = c("ensembl_gene_id", "hgnc_symbol", "entrezgene",
   "start_position", "end_position", "chromosome_name"),
   dataset = "hsapiens_gene_ensembl")
 
@@ -35,27 +37,30 @@ read_sce <- function(input_data_path = "input",
   sce <- calculateQCMetrics(sce, feature_controls = feature_ctrls)
   
   # Calculate size factors (using TMM - open to debate)
-  sizeFactors(sce) <- edgeR::calcNormFactors(as.matrix(counts(sce)), method = "TMM")
+  sce <- scran::computeSumFactors(sce)
   
   # Compute log normal expression values
-  sce <- normalizeSCE(sce)
+  sce <- normalize(sce)
   
   # Add in all the sample data
   sce$id <- id
+  sce$sample_id <- sample_id
   sce$batch_id <- batch_id
   sce$sample_type <- sample_type
   sce$cancer_type <- cancer_type
   sce$digestion_temperature <- digestion_temperature
   sce$tissue_state <- tissue_state
   sce$enzyme_mix <- enzyme_mix
-  sce$shahlab_path <- shahlab_path
+  sce$cell_status <- cell_status
   sce$genome <- genome
   
   # Make sure colnames are unique
-  colnames(sce) <- paste0(id, "_", colnames(sce))
+  colnames(sce) <- paste0(id, "_", sce$Barcode)
   
   # Save to output
   saveRDS(sce, output_scepath)
 }
+
+aargh(read_sce)
 
 
