@@ -1,0 +1,174 @@
+---
+title: "Temperature differential expression"
+author: "Kieran R Campbell"
+output:
+  html_document: 
+    toc: true
+    toc_float: true
+  html_notebook: default
+params:
+  comparison: 1
+  design_file: design.csv
+  output_rds: output.rds
+---
+
+This document performs differential expression for comparson `params$comparison` for temperatures 6 and 37 only
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      cache = FALSE)
+
+suppressPackageStartupMessages({
+  library(scater)
+  library(SingleCellExperiment)
+  library(tidyverse)
+  library(glue)
+  library(edgeR)
+  library(limma)
+  library(ggrepel)
+})
+```
+
+
+```{r}
+design <- read_csv(params$design_file)
+```
+
+Get the necessary samples:
+
+```{r}
+ids <- filter(design, comparison == params$comparison) %>% 
+  .$id
+```
+
+Format the SCEPaths:
+
+```{r}
+sce_paths <- sapply(ids, function(id) glue("../../data/scesets/{id}_sceset_qc.rds"))
+```
+
+Read the SCEs:
+
+```{r}
+sces <- lapply(sce_paths, readRDS)
+```
+
+We need to ditch some QC paths:
+
+```{r}
+rowdata_to_remove <- names(rowData(sces[[1]]))[13:20]
+print(rowdata_to_remove)
+```
+
+```{r}
+sces <- lapply(sces, function(sce) {
+  rowData(sce)[rowdata_to_remove] <- NULL
+  sce
+})
+```
+
+
+And bind these:
+
+```{r}
+sce <- do.call(cbind, sces)
+```
+
+And keep only things with temperature 6 or 37:
+
+```{r}
+sce <- sce[, sce$digestion_temperature %in% c("6", "37")]
+```
+
+
+And re-calculate size factors and normalised expression:
+
+```{r}
+sce <- scran::computeSumFactors(sce)
+sce <- normalize(sce)
+```
+
+
+And let's look at some PCA:
+
+```{r}
+sce <- runPCA(sce, ncomponents = 3)
+
+plotPCA(sce, colour_by = "total_features", ncomponents = 3)
+plotPCA(sce, colour_by = "digestion_temperature", ncomponents = 2)
+```
+
+
+
+```{r}
+plotColData(sce, x = "digestion_temperature", y = "total_features")
+```
+
+
+# Differential expression
+
+First make a second SingleCellExperiment for DE:
+
+```{r}
+counts_per_gene <- rowSums(as.matrix(counts(sce)))
+for_de <- counts_per_gene > 500
+
+sce_de <- sce[for_de,]
+```
+
+
+```{r}
+dge <- DGEList(counts(sce_de))
+dge <- calcNormFactors(dge)
+
+design <- model.matrix(~ digestion_temperature == "37", colData(sce_de)) # Your design matrix here
+
+v <- voom(dge, design, plot = TRUE)
+```
+
+```{r}
+fit <- lmFit(v, design)
+fit <- eBayes(fit)
+res <- decideTests(fit)
+
+# Correct the p-values and put into a data frame
+qvals <- p.adjust(fit$p.value[,2], method = 'BH')
+
+df_limma <- data_frame(log2foldchange = fit$coefficients[,2], 
+                       pval = fit$p.value[,2],
+                       qval = qvals,
+                       ensembl_id = rownames(sce_de),
+                       gene_symbol = rowData(sce_de)$Symbol,
+                       is_significant = qval < 0.05) 
+```
+
+
+
+```{r}
+sig_cols <- c("FALSE" = "grey80", "TRUE" = "darkred")
+theme_set(theme_bw(base_size = 11))
+
+df_text <- top_n(df_limma, 25, desc(qval))
+
+ggplot(df_limma, aes(x = log2foldchange, y = -log10(qval), color = is_significant)) +
+  geom_point(alpha = 0.7) +
+  scale_color_manual(values = sig_cols, name = "Significantly differentially expressed") +
+  geom_text_repel(data = df_text, aes(label = gene_symbol), color = 'black', size = 2) +
+  labs(x = expression(log[2]~"(coefficient of temperature)"),
+       y = expression(-log[10]~"(q-value)")) +
+  theme(legend.position = "bottom",
+        legend.box.background = element_rect(linetype = 1, size = 1)) 
+```
+
+
+```{r}
+mutate(df_limma, comparison = params$comparison) %>% 
+  write_rds(params$output_rds)
+```
+
+
+
+
+
+

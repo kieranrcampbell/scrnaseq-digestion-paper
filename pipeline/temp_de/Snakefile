@@ -1,0 +1,48 @@
+import pandas as pd
+import os
+
+configfile: "../../config.yaml"
+
+# Parse spreadsheet
+design_df = pd.read_csv(config['temp_de_url'])
+comparisons = list(set(design_df['comparison']))
+sce_ids=list(design_df['id'])
+
+# Input/Output files
+scesets_qc = expand("../../data/scesets/{id}_sceset_qc.rds", id=sce_ids)
+design_file = "temp_de_design.csv"
+reports = expand("../../reports/temp_de/temp_de_{comparison}.html", comparison=comparisons)
+tables = expand("../../data/temp_de/temp_de_results_{comparison}.rds", comparison=comparisons)
+
+
+rule all:
+    input:
+        reports,tables
+
+
+rule write_design:
+    output:
+        design_file
+    run:
+        design_df.to_csv(output[0])
+
+rule temp_de:
+    params:
+        curr_dir = os.getcwd()
+    input:
+        sces=scesets_qc,
+        design=design_file
+    output:
+        report="../../reports/temp_de/temp_de_{comparison}.html",
+        de_table="../../data/temp_de/temp_de_results_{comparison}.rds"
+    shell:
+        "Rscript -e \"rmarkdown::render('{params.curr_dir}/temp_de.Rmd', \
+        output_file='{params.curr_dir}/{output.report}', \
+        knit_root_dir='{params.curr_dir}', \
+        params=list(comparison='{wildcards.comparison}', \
+        design_file='{input.design}', \
+        output_rds='{params.curr_dir}/{output.de_table}'))\" "
+        
+
+
+
