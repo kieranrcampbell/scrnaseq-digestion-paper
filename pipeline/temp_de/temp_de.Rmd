@@ -12,7 +12,7 @@ params:
   output_rds: output.rds
 ---
 
-This document performs differential expression for comparson `params$comparison` for temperatures 6 and 37 only
+This document performs differential expression for comparson `r params$comparison` for temperatures 6 and 37 only
 
 
 ```{r setup, include=FALSE}

@@ -1,0 +1,118 @@
+---
+title: "Cell-specific temperature DE"
+author: "Allen W Zhang"
+output:
+  html_document: 
+    toc: true
+    toc_float: true
+  html_notebook: default
+params:
+  comparison: 1
+  design_file: design.csv
+  marker_mat: rho.csv
+  output_rds: output.rds
+---
+
+This document performs differential expression for comparson `r params$comparison` for temperatures 6 and 37 only
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      cache = FALSE)
+
+suppressPackageStartupMessages({
+  library(scater)
+  library(SingleCellExperiment)
+  library(tidyverse)
+  library(data.table)
+  library(glue)
+  library(edgeR)
+  library(limma)
+  library(ggrepel)
+  library(cellassign)
+})
+```
+
+```{r}
+design <- read_csv(params$design_file)
+```
+
+Get the necessary samples:
+
+```{r}
+ids <- filter(design, comparison == params$comparison) %>% 
+  .$id
+```
+
+Format the SCEPaths:
+
+```{r}
+sce_paths <- sapply(ids, function(id) glue("../../data/scesets/{id}_sceset_qc.rds"))
+```
+
+Read the SCEs:
+
+```{r}
+sces <- lapply(sce_paths, readRDS)
+```
+
+We need to ditch some QC paths:
+
+```{r}
+rowdata_to_remove <- names(rowData(sces[[1]]))[13:20]
+print(rowdata_to_remove)
+```
+
+```{r}
+sces <- lapply(sces, function(sce) {
+  rowData(sce)[rowdata_to_remove] <- NULL
+  sce
+})
+```
+
+And bind these:
+
+```{r}
+sce <- do.call(cbind, sces)
+```
+
+And keep only things with temperature 6 or 37:
+
+```{r}
+sce <- sce[, sce$digestion_temperature %in% c("6", "37")]
+```
+
+## CellAssign
+
+```{r}
+rho <- fread(marker_mat)
+
+```
+
+## DE
+
+TODO: Do the step below within each cluster
+
+And re-calculate size factors and normalised expression:
+
+```{r}
+sce <- scran::computeSumFactors(sce)
+sce <- normalize(sce)
+```
+
+
+And let's look at some PCA:
+
+```{r}
+sce <- runPCA(sce, ncomponents = 3)
+
+plotPCA(sce, colour_by = "total_features", ncomponents = 3)
+plotPCA(sce, colour_by = "digestion_temperature", ncomponents = 2)
+```
+
+
+```{r}
+plotColData(sce, x = "digestion_temperature", y = "total_features")
+```
+
+
