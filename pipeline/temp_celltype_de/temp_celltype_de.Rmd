@@ -30,6 +30,9 @@ suppressPackageStartupMessages({
   library(limma)
   library(ggrepel)
   library(cellassign)
+  library(cellassign.utils)
+  library(scrna.sceutils)
+  library(scrna.utils)
 })
 ```
 
@@ -85,34 +88,65 @@ sce <- sce[, sce$digestion_temperature %in% c("6", "37")]
 ## CellAssign
 
 ```{r}
-rho <- fread(marker_mat)
+rho <- read.table(marker_mat, row.names = 1, header = TRUE, sep = "\t", stringsAsFactors = FALSE)
+rho <- as.matrix(rho)
 
+sce <- scran::computeSumFactors(sce)
+
+# TODO: Need to convert gene IDs here
+Y <- as.matrix(counts(sce)[rownames(rho), ]) %>% t
+size_factors <- sizeFactors(sce)
+
+# TODO: Do a grouped analysis with batch as a covariate
+X <- model.matrix(~ digestion_temperature, colData(sce))
+
+res <- cellassign(rho = rho, exprs_obj = Y, s = size_factors, X = X, data_type = "RNAseq", n_batches = 1,
+                  phi_type = "cluster_specific", verbose = FALSE, num_runs = 10)
+
+sce$cellassign_cluster <- factor(as.numeric(str_extract(res$cell_type, "[0-9]+")))
+sce$cluster <- sce$cellassign_cluster
 ```
 
 ## DE
 
-TODO: Do the step below within each cluster
+```{r, echo = FALSE}
+celltypes <- with(colData(sce), table(dataset, cellassign_cluster))
+shared_celltypes <- colnames(celltypes)[which(colMins(celltypes) > 0)]
+```
 
-And re-calculate size factors and normalised expression:
+```{r, echo = FALSE, results = 'hide'}
+de_tables <- lapply(shared_celltypes, function(x) {
+  sce_subset <- sce %>% scater::filter(cellassign_cluster == x)
+  sce_subset <- scran::computeSumFactors(sce_subset)
+  sce_subset <- normalize(sce_subset)
+  
+  sce_subset_filtered <- sce_subset[which(with(rowData(sce_subset), pct_dropout_counts < 90 & log10_total_counts > 1)),]
+  sce_subset_filtered <- sce_subset_filtered %>% scater::mutate(cluster=digestion_temperature)
+  
+  de_table <- clusters_de(sce_subset_filtered, method = "voom", comparison = "average")
+  gene_id_mapping <- rowData(sce_subset_filtered) %>% subset(select = c("id", "symbol")) %>% plyr::rename(c("id"="gene_id")) %>% unique
+  
+  de_table <- de_table %>% plyr::join(gene_id_mapping %>% as.data.frame)
+  return(de_table)
+})
+names(de_tables) <- shared_celltypes
+```
 
-```{r}
-sce <- scran::computeSumFactors(sce)
-sce <- normalize(sce)
+```{r, echo = FALSE}
+ignore <- lapply(shared_celltypes, function(x) {
+  p <- plot_volcano(subset(de_tables[[x]], contrast == "37"), top_n = 40, log_q_val_threshold = NULL, nrow = 1, subtitle = x)
+  return(p)
+})
+names(ignore) <- shared_celltypes
+```
+
+```{r, results = 'asis', echo = FALSE}
+for (x in ignore) {
+  print(x)
+  cat("\n----\n")
+}
 ```
 
 
-And let's look at some PCA:
-
-```{r}
-sce <- runPCA(sce, ncomponents = 3)
-
-plotPCA(sce, colour_by = "total_features", ncomponents = 3)
-plotPCA(sce, colour_by = "digestion_temperature", ncomponents = 2)
-```
-
-
-```{r}
-plotColData(sce, x = "digestion_temperature", y = "total_features")
-```
 
 
