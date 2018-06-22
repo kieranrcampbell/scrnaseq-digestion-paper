@@ -93,8 +93,15 @@ rho <- as.matrix(rho)
 
 sce <- scran::computeSumFactors(sce)
 
-# TODO: Need to convert gene IDs here
-Y <- as.matrix(counts(sce)[rownames(rho), ]) %>% t
+rowdat <- rowData(sce)
+gene_ids <- df_as_map(rowdat, rownames(rho), from = "symbol", to = "id")
+gene_symbols <- rownames(rho)[!is.na(gene_ids)]
+gene_ids <- gene_ids[!is.na(gene_ids)]
+
+# TODO: Test this. 
+Y <- as.matrix(counts(sce)[gene_ids, ]) %>% t
+colnames(Y) <- gene_symbols
+
 size_factors <- sizeFactors(sce)
 
 # TODO: Do a grouped analysis with batch as a covariate
@@ -109,12 +116,12 @@ sce$cluster <- sce$cellassign_cluster
 
 ## DE
 
-```{r, echo = FALSE}
+```{r}
 celltypes <- with(colData(sce), table(dataset, cellassign_cluster))
 shared_celltypes <- colnames(celltypes)[which(colMins(celltypes) > 0)]
 ```
 
-```{r, echo = FALSE, results = 'hide'}
+```{r, results = 'hide'}
 de_tables <- lapply(shared_celltypes, function(x) {
   sce_subset <- sce %>% scater::filter(cellassign_cluster == x)
   sce_subset <- scran::computeSumFactors(sce_subset)
@@ -132,7 +139,7 @@ de_tables <- lapply(shared_celltypes, function(x) {
 names(de_tables) <- shared_celltypes
 ```
 
-```{r, echo = FALSE}
+```{r}
 ignore <- lapply(shared_celltypes, function(x) {
   p <- plot_volcano(subset(de_tables[[x]], contrast == "37"), top_n = 40, log_q_val_threshold = NULL, nrow = 1, subtitle = x)
   return(p)
@@ -140,7 +147,7 @@ ignore <- lapply(shared_celltypes, function(x) {
 names(ignore) <- shared_celltypes
 ```
 
-```{r, results = 'asis', echo = FALSE}
+```{r, results = 'asis'}
 for (x in ignore) {
   print(x)
   cat("\n----\n")
