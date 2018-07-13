@@ -1,0 +1,163 @@
+---
+title: "SA854 cell type discovery"
+author: "Kieran R Campbell"
+output:
+  html_document: 
+    toc: true
+    toc_float: true
+  html_notebook: default
+params:
+  comparison: 1
+  design_file: design.csv
+  output_rds: output.rds
+  pathway_output_csv: output.rds
+---
+
+This document performs differential expression for comparson `params$comparison` for temperatures 6 and 37 only
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      cache = FALSE)
+
+suppressPackageStartupMessages({
+  library(scater)
+  library(SingleCellExperiment)
+  library(tidyverse)
+  library(glue)
+  library(edgeR)
+  library(limma)
+  library(ggrepel)
+  library(org.Hs.eg.db)
+  library(cowplot)
+  library(mclust)
+})
+```
+
+# QC the sces together
+
+```{r}
+sa854_files <- dir("../../data/scesets/", pattern = "SA854_00[1-4]_sceset_raw", full.names = TRUE)
+
+sces <- lapply(sa854_files, readRDS)
+```
+
+Let's plot the pct mitocondrial vs total counts:
+
+```{r}
+mito_count_plots <- lapply(sces, function(sce) {
+  plotColData(sce, x = "total_features", y = "pct_counts_mito") +
+    labs(subtitle = paste0(sce$id[1], " at ", sce$digestion_temperature[1], "C"))
+})
+
+plot_grid(plotlist = mito_count_plots)
+```
+
+```{r}
+qc_sce <- function(sce) {
+  sce[, sce$total_features > 2000 & sce$pct_counts_mito < 50]
+}
+
+sces_qc <- sapply(sces, qc_sce)
+```
+
+And some PCA plots:
+
+```{r}
+sces_qc <- lapply(sces_qc, runPCA, ncomponents = 4)
+
+pca_plots_mito <- lapply(sces_qc, plotPCA, colour_by = "pct_counts_mito")
+pca_plots_features <- lapply(sces_qc, plotPCA, colour_by = "total_features")
+
+plot_grid(plotlist = pca_plots_mito)
+plot_grid(plotlist = pca_plots_features)
+```
+
+# Cluster
+
+Cluster the SCEs in PC space and annotate with high / low mito counts
+
+```{r}
+cluster_sce <- function(sce) {
+  pca <- reducedDims(sce)[['PCA']][,1:2]
+  mc <- Mclust(pca, G = 2)
+  mitos <- sapply(c(1,2), function(i) mean(sce$pct_counts_mito[mc$classification == i]))
+  sce$cluster <- "mito-low"
+  sce$cluster[mc$classification == which.max(mitos)] <- "mito-high"
+  sce
+}
+
+sces_qc <- lapply(sces_qc, cluster_sce)
+```
+
+```{r}
+cluster_plots <- lapply(sces_qc, plotPCA, colour_by = "cluster")
+plot_grid(plotlist = cluster_plots)
+```
+
+
+# Differential expression
+
+```{r}
+voom_de <- function(sce, cluster_str = "mito-high") {
+  # QC genes
+  sce <- calculateQCMetrics(sce)
+  sce <- sce[rowData(sce)$total_counts > 50, ]
+  dge <- DGEList(counts(sce))
+  dge <- calcNormFactors(dge)
+  
+  design <- model.matrix(~cluster == cluster_str, colData(sce)) 
+  
+  v <- voom(dge, design, plot = TRUE)
+  
+  fit <- lmFit(v, design)
+  fit <- eBayes(fit)
+  res <- decideTests(fit)
+  
+  # Correct the p-values and put into a data frame
+  qvals <- p.adjust(fit$p.value[,2], method = 'BH')
+  
+  df_limma <- data_frame(id = sce$id[1], 
+                         log2foldchange = fit$coefficients[,2], 
+                         pval = fit$p.value[,2],
+                         qval = qvals,
+                         ensembl_id = rownames(sce),
+                         gene_symbol = rowData(sce)$Symbol,
+                         chromosome = rowData(sce)$chromosome_name,
+                         is_significant = qval < 0.05) 
+  df_limma
+}
+```
+
+```{r}
+df_des <- lapply(sces_qc, voom_de)
+```
+
+Okay, so far so good
+
+```{r}
+lapply(df_des, dim)
+```
+
+```{r}
+df_de <- bind_rows(df_des)
+
+df_de$gene_type <- "other"
+df_de$gene_type[df_de$chromosome == "MT"] <- "mitochondrial"
+df_de$gene_type[grepl("^RP[L|S]", df_de$gene_symbol)] <- "ribosomal"
+df_de$gene_type[grepl("^HLA", df_de$gene_symbol)] <- "HLA"
+df_de$gene_type[grepl("^B2M", df_de$gene_symbol)] <- "HLA"
+```
+
+```{r}
+cols <- c("ribosomal"="darkred", "mitochondrial"="darkgreen","other"="grey80", "HLA"="purple")
+
+ggplot(df_de, aes(x = log2foldchange, y = -log10(qval), colour = gene_type)) + 
+  geom_point(alpha = 0.8) +
+  facet_wrap(~ id) +
+  scale_colour_manual(values = cols)
+```
+
+
+
+

@@ -13,36 +13,44 @@ scesets_qc = expand("../../data/scesets/{id}_sceset_qc.rds", id=sce_ids)
 design_file = "temp_de_design.csv"
 reports = expand("../../reports/temp_de/temp_de_{comparison}.html", comparison=comparisons)
 tables = expand("../../data/temp_de/temp_de_results_{comparison}.rds", comparison=comparisons)
+csv_tables = expand("../../data/temp_de/temp_de_results_{comparison}.csv", comparison=comparisons)
+pathway_tables = expand("../../data/temp_de_pathways/temp_de_pathways_{comparison}.csv", comparison=comparisons)
 
+# Write design to file
+design_df.to_csv(design_file)
 
 rule all:
     input:
-        reports,tables
-
-
-rule write_design:
-    output:
-        design_file
-    run:
-        design_df.to_csv(output[0])
+        reports,tables,csv_tables,pathway_tables
 
 rule temp_de:
     params:
         curr_dir = os.getcwd()
     input:
         sces=scesets_qc,
-        design=design_file
+        design=design_file,
+        go_geneset="../../data/genesets/human_c5_v5p2.rdata" # GO pathway annotations
     output:
         report="../../reports/temp_de/temp_de_{comparison}.html",
-        de_table="../../data/temp_de/temp_de_results_{comparison}.rds"
+        de_table="../../data/temp_de/temp_de_results_{comparison}.rds",
+        pathway_table="../../data/temp_de_pathways/temp_de_pathways_{comparison}.csv"
     shell:
         "Rscript -e \"rmarkdown::render('{params.curr_dir}/temp_de.Rmd', \
         output_file='{params.curr_dir}/{output.report}', \
         knit_root_dir='{params.curr_dir}', \
         params=list(comparison='{wildcards.comparison}', \
         design_file='{input.design}', \
-        output_rds='{params.curr_dir}/{output.de_table}'))\" "
-        
+        output_rds='{params.curr_dir}/{output.de_table}', \
+        pathway_output_csv='{params.curr_dir}/{output.pathway_table}'))\" "
+
+rule tables_to_csv:
+    input:
+        "../../data/temp_de/temp_de_results_{comparison}.rds"
+    output:
+        "../../data/temp_de/temp_de_results_{comparison}.csv"
+    shell:
+        "Rscript -e \"library(readr); d <- readRDS('{input}'); write_csv(d, '{output}')\" "
+
 
 
 

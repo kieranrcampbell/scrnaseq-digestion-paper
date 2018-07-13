@@ -10,6 +10,7 @@ params:
   comparison: 1
   design_file: design.csv
   output_rds: output.rds
+  pathway_output_csv: output.rds
 ---
 
 This document performs differential expression for comparson `params$comparison` for temperatures 6 and 37 only
@@ -27,6 +28,7 @@ suppressPackageStartupMessages({
   library(edgeR)
   library(limma)
   library(ggrepel)
+  library(org.Hs.eg.db)
 })
 ```
 
@@ -168,7 +170,50 @@ mutate(df_limma, comparison = params$comparison) %>%
 ```
 
 
+# Camera gene set enrichment analysis
 
+
+```{r}
+load("../../data/genesets/human_H_v5p2.rdata")
+go_gs <- Hs.H
+
+entrezgene_ensembl_map <- as.list(org.Hs.egENSEMBL)
+
+map_ids <- function(entrezgenes) {
+  x <- unlist(entrezgene_ensembl_map[entrezgenes])
+  names(x) <- NULL
+  x
+}
+```
+
+```{r}
+go_gs_ensembl <- lapply(go_gs, map_ids)
+names(go_gs_ensembl) <- sub("GO_", "", names(go_gs_ensembl))
+
+idx <- ids2indices(go_gs_ensembl, id = rownames(fit))
+cam <- camera(v, idx, design, trend.var = TRUE)
+```
+
+
+```{r}
+pathways <- names(go_gs_ensembl)
+
+cam <- rownames_to_column(cam, "pathway")
+
+
+df_lfc <- lapply(pathways, function(pathway) {
+  df_limma[idx[[pathway]], ] %>% 
+  summarise(mean_log2foldchange = median(log2foldchange), pathway = pathway)
+}) %>% 
+  bind_rows()
+
+df_gs <- inner_join(cam, df_lfc) %>% 
+  dplyr::mutate(significant = FDR < 0.05,
+                comparison = params$comparison) %>% 
+  as_tibble()
+
+write_csv(df_gs, params$pathway_output_csv)
+```
 
 
 
