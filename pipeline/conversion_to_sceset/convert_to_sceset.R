@@ -15,7 +15,9 @@ read_sce <- function(input_data_path = "input",
                      enzyme_mix = "enzyme_mix",
                      jira_ticket = "jira_ticket",
                      cell_status = "cell_status",
-                     genome = "genome") {
+                     genome = "genome",
+                     filter_total_features = 1000,
+                     filter_pct_counts_mito = 15) {
 
   sce <- read10XResults(input_data_path)
 
@@ -32,6 +34,8 @@ read_sce <- function(input_data_path = "input",
   sce$jira_ticket <- jira_ticket
   sce$cell_status <- cell_status
   sce$genome <- genome
+  sce$filter_total_features <- filter_total_features
+  sce$filter_pct_counts_mito <- filter_pct_counts_mito
 
   rowData(sce)$ensembl_gene_id <- rownames(sce)
   

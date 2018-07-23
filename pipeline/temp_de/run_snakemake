@@ -1,0 +1,2 @@
+sudo docker run -t -v /batchfx/:/batchfx/ statgen snakemake --unlock -j $1 -s $(pwd)/Snakefile --directory $(pwd)
+sudo docker run -t -v /batchfx/:/batchfx/ statgen snakemake -j $1 -s $(pwd)/Snakefile --directory $(pwd)

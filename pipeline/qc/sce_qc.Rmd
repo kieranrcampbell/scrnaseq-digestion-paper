@@ -53,7 +53,7 @@ plotPhenoData(sce, x = "total_features", y = "total_counts")
 Number of cells to retain:
 
 ```{r}
-cells_to_keep <- sce$total_features > 2000 & sce$pct_counts_mito < 15
+cells_to_keep <- sce$total_features > sce$filter_total_features & sce$pct_counts_mito < sce$filter_pct_counts_mito
 table(cells_to_keep)
 ```
 

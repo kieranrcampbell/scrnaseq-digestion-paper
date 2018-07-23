@@ -42,7 +42,9 @@ rule convert_to_sce:
         enzyme_mix=lambda wildcards: inventory_dict[wildcards.id]['enzyme_mix'],
         jira_ticket=lambda wildcards: inventory_dict[wildcards.id]['jira_ticket'],
         cell_status=lambda wildcards: inventory_dict[wildcards.id]['cell_status'],
-        genome=lambda wildcards: inventory_dict[wildcards.id]['genome']
+        genome=lambda wildcards: inventory_dict[wildcards.id]['genome'],
+	filter_total_features=lambda wildcards: inventory_dict[wildcards.id]['filter_total_features'],
+	filter_pct_counts_mito=lambda wildcards: inventory_dict[wildcards.id]['filter_pct_counts_mito']
     input:
         expand("data/raw_10X/{{id}}/{file}", file=files10X)
     output:
@@ -61,7 +63,9 @@ rule convert_to_sce:
         --enzyme_mix {params.enzyme_mix} \
         --jira_ticket '{params.jira_ticket}' \
         --cell_status {params.cell_status} \
-        --genome {params.genome}"
+        --genome {params.genome} \
+	--filter_total_features {params.filter_total_features} \
+	--filter_pct_counts_mito {params.filter_pct_counts_mito}"
 
 rule qc_scesets:
     params:
