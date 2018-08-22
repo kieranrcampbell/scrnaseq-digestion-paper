@@ -145,6 +145,18 @@ df_limma <- data_frame(log2foldchange = fit$coefficients[,2],
                        is_significant = qval < 0.05) 
 ```
 
+Add in mean expression in each type:
+
+```{r}
+mean_exprs_6 <- rowMeans(as.matrix(logcounts(sce_de[, sce_de$digestion_temperature == "6"])))
+mean_exprs_37 <- rowMeans(as.matrix(logcounts(sce_de[, sce_de$digestion_temperature == "37"])))
+
+df_limma <- mutate(df_limma,
+                   mean_exprs_6 = mean_exprs_6,
+                   mean_exprs_37 = mean_exprs_37)
+```
+
+
 
 
 ```{r}

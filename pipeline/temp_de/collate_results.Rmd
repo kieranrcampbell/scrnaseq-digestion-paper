@@ -25,6 +25,9 @@ suppressPackageStartupMessages({
   library(edgeR)
   library(limma)
   library(ggrepel)
+  library(broom)
+  library(ggrepel)
+  library(org.Hs.eg.db)
 })
 ```
 
@@ -47,9 +50,10 @@ mapping = c(
   "1"="SA854 (MDA-MB-231 TNBC cell line)",
   "2"="SA604X9XB2413 (TNBC PDX)",
   "3"="SA604X9XB2417 (TNBC PDX)",
-  "4"="SA604X6 (TNBC PDX)",
+  "4"="SA604X6XB01979 (TNBC PDX)",
   "5"="VOA11019SA (HGSC Ovarian patient sample)",
-  "6"="SA604X8XB02164 (TNBC PDX)"
+  "6"="SA604X8XB02164 (TNBC PDX)",
+  "7" ="SA604X7XB02089 (TNBC PDC)"
 )
 
 custom_cols <- c(
@@ -66,13 +70,13 @@ df_de$description <- plyr::mapvalues(df_de$comparison, from = names(mapping), to
 gene_df <- filter(df_de, !is.na(gene_type))
 
 df_text <- group_by(df_de, comparison) %>% 
-  top_n(25, desc(qval))
+  top_n(10, desc(qval))
 
 ggplot(df_de, aes(x = log2foldchange, y = -log10(qval))) +
   geom_point(colour = "grey60") +
   geom_point(data = gene_df, aes(colour = gene_type)) +
   geom_text_repel(data = df_text, aes(label = gene_symbol), size = 2.7) +
-  facet_wrap(~ description, scales = "free") +
+  facet_wrap(~ description, scales = "free", nrow = 2) +
   labs(x = expression(log[2]~(fold~change)~"37C vs 6C"),
        y = expression(-log[10](q-value))) +
   scale_color_manual(values=custom_cols) +
@@ -118,6 +122,47 @@ cowplot::plot_grid(plotlist = plots, nrow = 3)
 ggsave("../../figs/hsp_response.png", width = 14, height = 10)
 ```
 
+# Find switch-off patterns at 6C like FOS
+
+```{r}
+df_lab <- group_by(df_de, comparison) %>% 
+  top_n(8, log2foldchange) %>% 
+  filter(mean_exprs_6 < 1)
+
+ggplot(df_de, aes(x = mean_exprs_6, y = log2foldchange)) +
+  geom_point(aes(fill = log2foldchange), shape = 21, colour = 'grey50') +
+  geom_label_repel(data = df_lab, aes(label = gene_symbol), size = 2) +
+  facet_wrap(~ description, scales = "free") +
+  labs(y = "logfoldchange(37C vs 6C)", x = "Mean log expression at 6C") +
+  theme_bw() +
+  theme(strip.background = element_rect(fill = 'grey95'), 
+        strip.text = element_text(size = 6),
+        legend.position = "none") +
+  scale_fill_gradient2(low = "darkblue", high = "darkred")
+
+ggsave("../../figs/logfoldchange_vs_6C_expression.png", width = 7, height = 5)
+```
+
+```{r}
+df_lab <- group_by(df_de, comparison) %>% 
+  top_n(8, -log2foldchange) %>% 
+  filter(mean_exprs_37 < 1)
+
+ggplot(df_de, aes(x = mean_exprs_37, y = log2foldchange)) +
+  geom_point(aes(colour = log2foldchange)) +
+  geom_label_repel(data = df_lab, aes(label = gene_symbol), size = 2) +
+  facet_wrap(~ description, scales = "free") +
+  labs(y = "logfoldchange(37C vs 6C)", x = "Mean log expression at 37C") +
+  theme_bw() +
+  theme(strip.background = element_rect(fill = 'grey95'), 
+        strip.text = element_text(size = 6),
+        legend.position = "none") +
+  scale_colour_gradient2(low = "darkblue", high = "darkred")
+
+# ggsave("../../figs/logfoldchange_vs_6C_expression.png", width = 7, height = 5)
+```
+
+
 # GO analysis
 
 ```{r}
@@ -156,4 +201,204 @@ ggplot(top_df, aes(x = pathway, y = -log10(FDR), fill = Direction)) +
   facet_wrap(~ description, scales = "free_x") +
   coord_flip()
 ```
+
+# Core set of temperature effected genes
+
+```{r}
+select <- dplyr::select
+df_de2 <- select(df_de, log2foldchange, ensembl_id, gene_symbol, description)
+
+ggplot(df_de2, aes(x = log2foldchange)) +
+  geom_histogram() +
+  facet_wrap(~ description)
+```
+
+```{r}
+df_de2 <- filter(df_de2, !grepl("HGSC", description))
+```
+
+
+```{r}
+df_de3 <- spread(df_de2, description, log2foldchange) %>% 
+  drop_na() %>% 
+  gather(description, log2foldchange, -ensembl_id, -gene_symbol)
+
+
+df_tt <- group_by(df_de3, gene_symbol, ensembl_id) %>%
+  do(ttest = t.test(.$log2foldchange, alternative = "two.sided")) %>% 
+  tidy(ttest) %>% 
+  mutate(q.value = p.adjust(p.value, method = "BH")) %>% 
+  ungroup()
+```
+
+```{r}
+ggplot(df_tt, aes(x = p.value)) +
+  geom_histogram(bins = 100)
+
+ggplot(df_tt, aes(x = q.value)) +
+  geom_histogram(bins = 100)
+```
+
+```{r}
+df_ann <- bind_rows( 
+  filter(df_tt, q.value < 0.05, estimate > 0) %>% 
+    top_n(20, abs(estimate)),
+  filter(df_tt, q.value < 0.05, estimate < 0) %>% 
+  top_n(10, abs(estimate))
+)
+  
+ggplot(df_tt, aes(x = estimate, y = -log10(q.value), colour = q.value < 0.05)) +
+  geom_point() +
+  geom_text_repel(data = df_ann, aes(label = gene_symbol), colour = 'black', size = 3) +
+  cowplot::theme_cowplot(font_size = 11) +
+  scale_colour_manual(values = c("TRUE"="darkred", "FALSE"="grey80"),
+                      name = "In perturbed gene set") +
+  labs(x = "Combined effect size, 37C vs 6C") +
+  theme(legend.position = "bottom")
+  
+collated_volcano <- last_plot()
+```
+
+
+## Pathway analysis of gene set
+
+```{r}
+
+statistic <- df_tt$estimate
+names(statistic) <- df_tt$ensembl_id
+```
+
+
+
+```{r}
+load("../../data/genesets/human_H_v5p2.rdata")
+go_gs <- Hs.H
+
+entrezgene_ensembl_map <- as.list(org.Hs.egENSEMBL)
+
+map_ids <- function(entrezgenes) {
+  x <- unlist(entrezgene_ensembl_map[entrezgenes])
+  names(x) <- NULL
+  x
+}
+```
+
+```{r}
+go_gs_ensembl <- lapply(go_gs, map_ids)
+names(go_gs_ensembl) <- sub("GO_", "", names(go_gs_ensembl))
+
+idx <- ids2indices(go_gs_ensembl, id = names(statistic))
+
+cam <- cameraPR(statistic, idx)
+```
+
+
+```{r}
+cam <- rownames_to_column(cam, "pathway")
+
+df_annotate <- top_n(cam, 5, -FDR)
+df_annotate$pathway <- gsub("HALLMARK_", "", df_annotate$pathway)
+
+ggplot(cam, aes(x = Direction, y = -log10(FDR))) +
+  geom_point(aes(colour = Direction), size = 3) +
+  geom_label_repel(data = df_annotate, aes(label = pathway), size = 3) +
+  cowplot::theme_cowplot(font_size = 11) +
+  scale_colour_manual(values = c("Up"="darkgreen", "Down"="darkred"), guide = FALSE)
+
+collated_pathway <- last_plot()
+```
+
+And make some sort of heat plot
+
+```{r}
+df_set <- filter(df_tt, q.value < 0.05)
+df_pathways <- bind_rows(lapply(df_set$ensembl_id, function(id) {
+  x <- 1 * sapply(go_gs_ensembl, function(g) id %in% g)
+  enframe(x, "pathway", "value") %>% 
+    mutate(ensembl_id = id)
+}))
+```
+
+```{r}
+dfp <- inner_join(df_pathways, df_set) %>% 
+  mutate(up_regulation = estimate > 0) 
+
+# Let's tidy this up
+dfp$regulation <- plyr::mapvalues(dfp$up_regulation, from = c(TRUE, FALSE),
+                                  to = c("Upregulated at 37C", "Upregulated at 6C"))
+
+dfp$pathway <- gsub("HALLMARK_", "", dfp$pathway)
+
+dfp <- group_by(dfp, pathway) %>%
+  summarise(sumval = sum(value)) %>%
+  filter(sumval > 5) %>%
+  inner_join(dfp) %>% 
+  ungroup()
+
+dfp <- group_by(dfp, ensembl_id, gene_symbol) %>% 
+  summarise(ngene = sum(value)) %>% 
+  ungroup() %>% 
+  filter(ngene > 0) %>% 
+  inner_join(dfp)
+
+
+# Get a pathway clustering
+dp <- dplyr::select(dfp, ensembl_id, pathway, value) %>% 
+  spread(pathway, value) %>% 
+  dplyr::select(-ensembl_id) %>% 
+  as.matrix() %>% 
+  t() %>% 
+  dist() %>% 
+  hclust()
+
+dp2 <- dplyr::select(dfp, gene_symbol, pathway, value) %>% 
+  spread(pathway, value)
+g <- dp2$gene_symbol
+dp2 <- select(dp2, -gene_symbol) %>% 
+  as.matrix()
+rownames(dp2) <- g
+dp2 <- dist(dp2) %>% 
+  hclust()
+
+pathway_order <- dp$labels[dp$order]
+dfp$pathway <- factor(dfp$pathway, levels = pathway_order)
+gene_order <- dp2$labels[dp2$order]
+dfp$gene_symbol <- factor(dfp$gene_symbol, levels = gene_order)
+
+
+dfp$value <- as.character(dfp$value)
+
+
+dfp %>% 
+  ggplot(aes(x = gene_symbol, y =  pathway, fill = value)) +
+  geom_tile() +
+  cowplot::theme_cowplot(font_size = 11) +
+  facet_grid(~ regulation, scales = "free_x", space = "free_x") +
+  scale_fill_manual(values = c("1"="black", "0"="white")) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  theme(axis.text = element_text(colour = 'black'),
+        legend.position = "none",
+        strip.background = element_rect(fill = 'white'),
+        strip.text = element_text(size = 11)) +
+  labs(x = "Gene", y = "Pathway")
+  
+collated_heatmap <- last_plot()
+```
+
+Save figure:
+```{r}
+
+```
+
+Dataset description:
+
+```{r}
+print(nrow(df_set))
+```
+
+```{r}
+table(df_set$estimate > 0)
+```
+
+
 

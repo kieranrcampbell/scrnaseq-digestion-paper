@@ -55,6 +55,8 @@ mito_count_plots <- lapply(sces, function(sce) {
 })
 
 plot_grid(plotlist = mito_count_plots)
+
+ggsave("../../figs/SA854/SA854_mito_vs_total_features.png", width = 8, height = 5.5)
 ```
 
 ```{r}
@@ -74,6 +76,8 @@ pca_plots_mito <- lapply(sces_qc, plotPCA, colour_by = "pct_counts_mito")
 pca_plots_features <- lapply(sces_qc, plotPCA, colour_by = "total_features")
 
 plot_grid(plotlist = pca_plots_mito)
+ggsave("../../figs/SA854/SA854_mito_PCA.png", width = 8, height = 5.5)
+
 plot_grid(plotlist = pca_plots_features)
 ```
 
@@ -97,6 +101,7 @@ sces_qc <- lapply(sces_qc, cluster_sce)
 ```{r}
 cluster_plots <- lapply(sces_qc, plotPCA, colour_by = "cluster")
 plot_grid(plotlist = cluster_plots)
+
 ```
 
 Let's recompute the size factors:
@@ -107,6 +112,20 @@ normalize_sce <- function(sce) {
   sce
 }
 ```
+
+Delete this:
+
+```{r}
+get_ensembl_id <- function(symbol) {
+  rownames(sce)[rowData(sce)$Symbol == symbol]
+}
+plotPCA(sce, colour_by = get_ensembl_id("B2M"))
+
+plotPCA(sce, colour_by = get_ensembl_id("OPG"))
+plotExpression(sce, x = "cluster", features = get_ensembl_id("VEGFB"))
+```
+
+
 
 
 # Differential expression
@@ -183,6 +202,8 @@ ggplot(df_de, aes(x = log2foldchange, y = -log10(qval), colour = gene_type)) +
   facet_wrap(~ id) +
   scale_colour_manual(values = cols) +
   labs(x = "log2foldchange mito-high vs low")
+
+ggsave("../../figs/SA854/SA854_cluster_differential_expression.png", width = 8, height = 5)
 ```
 
 
@@ -248,7 +269,7 @@ ggplot(df_cam, aes(x = Direction, y = -log10(FDR), colour = Direction)) +
         strip.background = element_rect(fill = "grey90")) +
   labs(x = "Regulation in mitochondrial-'hot' cell type")
 
-ggsave("../../figs/sa854_mito_vs_rest_enrichment.png", width = 7, height = 5)
+ggsave("../../figs/SA854/SA854_mito_vs_rest_enrichment.png", width = 7, height = 5)
 ```
 
 Let's just graph the oxidative phosphorylation at 6C:

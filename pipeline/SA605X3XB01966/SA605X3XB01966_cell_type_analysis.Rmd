@@ -1,0 +1,125 @@
+---
+title: "SA605X3XB01966 cell type analysis"
+author: "Kieran R Campbell"
+output:
+  html_notebook:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      cache = FALSE)
+
+suppressPackageStartupMessages({
+  library(scater)
+  library(SingleCellExperiment)
+  library(tidyverse)
+  library(glue)
+  library(edgeR)
+  library(limma)
+  library(ggrepel)
+  library(org.Hs.eg.db)
+  library(cowplot)
+  library(mclust)
+  library(scran)
+  library(readxl)
+  library(SC3)
+})
+
+get_ensembl_id <- function(symbol, sce) {
+  stopifnot(symbol %in% rowData(sce)$Symbol)
+  rownames(sce)[rowData(sce)$Symbol == symbol]
+}
+
+prepare_for_sc3 <- function(sce) {
+  counts(sce) <- as.matrix(counts(sce))
+  logcounts(sce) <- as.matrix(logcounts(sce))
+  rowData(sce)$feature_symbol <- rowData(sce)$Symbol
+  sce
+}
+
+set.seed(123L)
+```
+
+
+```{r}
+files <- dir("../../data/scesets/", pattern = "SA605X3XB*.*qc", full.names = TRUE)
+sces <- lapply(files, readRDS)
+
+names(sces) <- sapply(sces, function(sce) sce$id[1])
+```
+
+```{r}
+remove_rowdata <- function(sce) {
+  rowData(sce)[13:20] <- NULL
+  sce
+}
+
+sces <- lapply(sces, remove_rowdata)
+```
+
+And bind to one big SCE
+
+```{r}
+sce <- do.call("cbind", sces)
+
+```
+
+```{r}
+set.seed(14568745)
+sce <- runPCA(sce, ncomponents = 5)
+# sce <- runTSNE(sce)
+```
+
+and some PCA plots
+
+```{r}
+plotPCA(sce, colour_by = "digestion_temperature")
+plotPCA(sce, colour_by = "sample_id")
+plotPCA(sce, colour_by = "id")
+ggsave("../../figs/SA605X3XB01966/SA605X3XB01966_all_sample_pca.png", width = 7, height = 6)
+plotPCA(sce, colour_by = "pct_counts_mito")
+plotPCA(sce, colour_by = "pct_counts_ribo")
+plotPCA(sce, colour_by = "total_features")
+```
+
+# TENX003_SA605X3XB01966_001
+
+```{r}
+sce1 <- sces[["TENX003_SA605X3XB01966_001"]]
+```
+
+```{r}
+sce1 <- runPCA(sce1, ncomponents = 3)
+```
+
+```{r}
+sce1 <- sc3(prepare_for_sc3(sce1), ks = 2)
+```
+
+
+```{r}
+plotPCA(sce1, colour_by = "sc3_2_clusters")
+```
+
+```{r}
+sce1_copy <- sce1
+rownames(sce1_copy) <- paste0(rowData(sce1_copy)$Symbol, "_", rownames(sce1_copy))
+fm <- findMarkers(sce1_copy, sce1_copy$sc3_2_clusters)
+```
+
+```{r}
+pca_gene <- function(gene) plotPCA(sce1, colour_by = get_ensembl_id(gene, sce1)) + labs(title = gene)
+
+cowplot::plot_grid(
+  pca_gene("SPARC"),
+  pca_gene("B2M"),
+  pca_gene("NFKBIA"),
+  pca_gene("COL3A1"),
+  pca_gene("VIM"),
+  pca_gene("UBC"),
+  ncol = 2)
+ggsave("../../figs/SA605X3XB01966/SA605X3XB01966_001_marker.png", width = 10, height = 11)
+```
+
+

@@ -1,0 +1,297 @@
+---
+title: "SA604X9XB cell type analysis"
+author: "Kieran R Campbell"
+output:
+  html_notebook:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      cache = FALSE)
+
+suppressPackageStartupMessages({
+  library(scater)
+  library(SingleCellExperiment)
+  library(tidyverse)
+  library(glue)
+  library(edgeR)
+  library(limma)
+  library(ggrepel)
+  library(org.Hs.eg.db)
+  library(cowplot)
+  library(mclust)
+  library(scran)
+  library(readxl)
+  library(SC3)
+  library(NNLM)
+  library(broom)
+})
+
+get_ensembl_id <- function(symbol, sce) {
+  stopifnot(symbol %in% rowData(sce)$Symbol)
+  rownames(sce)[rowData(sce)$Symbol == symbol]
+}
+
+prepare_for_sc3 <- function(sce) {
+  counts(sce) <- as.matrix(counts(sce))
+  logcounts(sce) <- as.matrix(logcounts(sce))
+  rowData(sce)$feature_symbol <- rowData(sce)$Symbol
+  sce
+}
+
+set.seed(123L)
+```
+
+
+```{r}
+files <- dir("../../data/scesets/", pattern = "SA604X9XB*.*qc", full.names = TRUE)
+sces <- lapply(files, readRDS)
+
+names(sces) <- sapply(sces, function(sce) sce$id[1])
+```
+
+```{r}
+remove_rowdata <- function(sce) {
+  rowData(sce)[13:20] <- NULL
+  sce
+}
+
+sces <- lapply(sces, remove_rowdata)
+```
+
+And bind to one big SCE
+
+```{r}
+sce <- do.call("cbind", sces)
+```
+
+```{r}
+set.seed(14568745)
+sce <- runPCA(sce, ncomponents = 5)
+sce <- runTSNE(sce)
+```
+
+and some PCA plots
+
+```{r}
+plotPCA(sce, colour_by = "digestion_temperature")
+plotPCA(sce, colour_by = "sample_id")
+plotPCA(sce, colour_by = "id")
+```
+
+```{r}
+plotTSNE(sce, colour_by = "digestion_temperature")
+plotTSNE(sce, colour_by = "sample_id")
+plotTSNE(sce, colour_by = "id")
+plotTSNE(sce, colour_by = "pct_counts_mito")
+plotTSNE(sce, colour_by = "pct_counts_ribo")
+```
+
+```{r}
+ggplot(as.data.frame(colData(sce)), aes(x = pct_counts_ribo, y = pct_counts_mito, fill = id)) +
+  geom_point(shape = 21, colour = 'grey80', alpha = 0.3) +
+  facet_wrap(~ id) +
+  cowplot::theme_cowplot(font_size = 11) +
+  theme(legend.position = "none", 
+        strip.background = element_rect(fill = 'grey95')) +
+  geom_rug() +
+  geom_density_2d(colour = 'grey50') +
+  labs(x = "% counts ribosomal", y = "% counts mitochondrial")
+
+ggsave("../../figs/SA604X9XB/SA604X9XB_mito_vs_ribo.png", width = 7, height = 5)
+```
+
+# Derive immune and HSP scores and linear model fit
+
+```{r}
+make_score <- function(sce, inds) {
+  lc <- t(as.matrix(logcounts(sce)[inds,]))
+  n <- nnmf(lc)
+  score <- n$W[,1]
+  (score - min(score)) / (max(score) - min(score))
+}
+
+hsp_inds <- grep("^HSP|FOS|UBC", rowData(sce)$Symbol)
+immune_inds <- match(c("HLA-A", "HLA-B", "HLA-C", "B2M"), rowData(sce)$Symbol)
+
+sce$hsp_score <- make_score(sce, hsp_inds)
+sce$immune_score <- make_score(sce, immune_inds)
+```
+
+
+```{r}
+sce$prop_counts_mito <- 0.01 * sce$pct_counts_mito
+
+tf <- sce$total_features
+sce$scale_total_features <- (tf - min(tf)) / (max(tf) - min(tf))
+
+lm_hsp <- lm(hsp_score ~ scale_total_features + prop_counts_mito + (digestion_temperature == 37), data = as.data.frame(colData(sce)))
+lm_immune <- lm(immune_score ~ scale_total_features + prop_counts_mito + (digestion_temperature == 37), data = as.data.frame(colData(sce)))
+```
+
+Tidy into data frame
+
+```{r}
+df_coef <- rbind(
+  tidy(lm_hsp) %>% 
+    mutate(outcome = "Heat shock score"),
+  tidy(lm_immune) %>% 
+    mutate(outcome = "Immune score")
+) %>% 
+  filter(term != "(Intercept)")
+
+df_coef$term <- plyr::mapvalues(df_coef$term,
+                                from = c("prop_counts_mito", "digestion_temperature == 37TRUE", "scale_total_features"),
+                                to = c("Proportion of counts mitochondrial", "Digestion at 37C", "# genes expressed"))
+
+ggplot(df_coef, aes(x = term, y = estimate, fill = term)) +
+  geom_bar(stat = "identity", colour = 'black') +
+  facet_wrap(~ outcome) +
+  coord_flip() +
+  scale_fill_brewer(palette = "Blues") +
+  labs(y = "Coefficient estimate",
+       subtitle = "SA604X9XB") +
+  theme_cowplot(font_size = 11) +
+  theme(axis.title.y = element_blank(),
+        legend.position = "none",
+        strip.background = element_rect(fill = 'white')) +
+  geom_hline(yintercept = 0, colour = 'grey10')
+
+ggsave("../../figs/SA604X9XB/coefficients_sa604x9xb.png", width = 5, height = 2)
+```
+
+
+```{r}
+plotPCA(sce, colour_by = "pct_counts_mito")
+plotPCA(sce, colour_by = "immune_score")
+plotPCA(sce, colour_by = "hsp_score")
+```
+
+
+
+
+# Let's look at the 6C cell types only
+
+## 13
+
+```{r}
+sce_13_6 <- sces[['TENX023_SA604X9XB2413_002']]
+
+sce_13_6 <- runPCA(sce_13_6, ncomponents = 3)
+
+plotPCA(sce_13_6)
+```
+
+Cluster analysis:
+
+```{r}
+sce_13_6 <- prepare_for_sc3(sce_13_6)
+sce_13_6 <- sc3(sce_13_6, ks = 2)
+
+plotPCA(sce_13_6, colour_by = "sc3_2_clusters")
+```
+
+```{r}
+# rownames(sce_13_6) <- paste0(rownames(sce_13_6), "_", rowData(sce_13_6)$Symbol)
+
+fm <- findMarkers(sce_13_6, sce_13_6$sc3_2_clusters)
+```
+
+```{r}
+cowplot::plot_grid(
+  plotPCA(sce_13_6, colour_by = "pct_counts_mito"),
+  plotPCA(sce_13_6, colour_by = "pct_counts_ribo"),
+  plotPCA(sce_13_6, colour_by = get_ensembl_id("HLA-A", sce)) + ggtitle("HLA-A"),
+  nrow = 1
+)
+
+ggsave("../../figs/SA604X9XB/pca_TENX023_SA604X9XB2413_002.png", width = 12, height = 4)
+```
+
+## 17
+
+
+```{r}
+sce_17_6 <- sces[['TENX024_SA604X9XB2417_002']]
+
+sce_17_6 <- runPCA(sce_17_6, ncomponents = 3)
+
+plotPCA(sce_17_6)
+```
+
+Cluster analysis:
+
+```{r}
+sce_17_6 <- prepare_for_sc3(sce_17_6)
+sce_17_6 <- sc3(sce_17_6, ks = 2)
+
+plotPCA(sce_17_6, colour_by = "sc3_2_clusters")
+```
+
+```{r}
+# rownames(sce_13_6) <- paste0(rownames(sce_13_6), "_", rowData(sce_13_6)$Symbol)
+
+fm <- findMarkers(sce_17_6, sce_17_6$sc3_2_clusters)
+```
+
+```{r}
+cowplot::plot_grid(
+  plotPCA(sce_17_6, colour_by = "pct_counts_mito"),
+  plotPCA(sce_17_6, colour_by = "pct_counts_ribo"),
+  plotPCA(sce_17_6, colour_by = get_ensembl_id("HLA-A", sce)) + ggtitle("HLA-A"),
+  nrow = 1
+)
+
+ggsave("../../figs/SA604X9XB/pca_TENX023_SA604X9XB2417_002.png", width = 12, height = 4)
+```
+
+
+# Let's look at the 37C cell types only
+
+## 13
+
+```{r}
+sce_13_37 <- sces[['TENX023_SA604X9XB2413_001']]
+
+sce_13_37 <- runPCA(sce_13_37, ncomponents = 3)
+
+plotPCA(sce_13_37)
+```
+
+
+```{r}
+cowplot::plot_grid(
+  plotPCA(sce_13_37, colour_by = "pct_counts_mito"),
+  plotPCA(sce_13_37, colour_by = "pct_counts_ribo"),
+  plotPCA(sce_13_37, colour_by = get_ensembl_id("HLA-A", sce)) + ggtitle("HLA-A"),
+  nrow = 1
+)
+
+ggsave("../../figs/SA604X9XB/pca_TENX023_SA604X9XB2413_001.png", width = 14, height = 4)
+```
+
+## 17
+
+
+```{r}
+sce_17_37 <- sces[['TENX024_SA604X9XB2417_001']]
+
+sce_17_37 <- runPCA(sce_17_37, ncomponents = 3)
+
+plotPCA(sce_17_37)
+```
+
+```{r}
+cowplot::plot_grid(
+  plotPCA(sce_17_37, colour_by = "pct_counts_mito"),
+  plotPCA(sce_17_37, colour_by = "pct_counts_ribo"),
+  plotPCA(sce_17_37, colour_by = get_ensembl_id("HLA-A", sce)) + ggtitle("HLA-A"),
+  nrow = 1
+)
+
+ggsave("../../figs/SA604X9XB/pca_TENX023_SA604X9XB2417_001.png", width = 14, height = 4)
+```
+
+
+

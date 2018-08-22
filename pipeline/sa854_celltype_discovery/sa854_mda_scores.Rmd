@@ -1,0 +1,142 @@
+---
+title: "SA854 (MDA) scores"
+author: "Kieran R Campbell"
+output:
+  html_document: 
+    toc: true
+    toc_float: true
+  html_notebook: default
+params:
+  comparison: 1
+  design_file: design.csv
+  output_rds: output.rds
+  pathway_output_csv: output.rds
+---
+
+This document performs differential expression for comparson `params$comparison` for temperatures 6 and 37 only
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      cache = FALSE)
+
+suppressPackageStartupMessages({
+  library(scater)
+  library(SingleCellExperiment)
+  library(tidyverse)
+  library(glue)
+  library(edgeR)
+  library(limma)
+  library(ggrepel)
+  library(org.Hs.eg.db)
+  library(cowplot)
+  library(mclust)
+  library(scran)
+  library(NNLM)
+  library(broom)
+})
+
+set.seed(123L)
+```
+
+# Read Data and QC
+
+```{r}
+sa854_files <- dir("../../data/scesets/", pattern = "SA854_00[1-4]_sceset_raw", full.names = TRUE)
+
+sces <- lapply(sa854_files, readRDS)
+```
+
+Let's plot the pct mitocondrial vs total counts:
+
+```{r}
+mito_count_plots <- lapply(sces, function(sce) {
+  plotColData(sce, x = "total_features", y = "pct_counts_mito") +
+    labs(subtitle = paste0(sce$id[1], " at ", sce$digestion_temperature[1], "C"))
+})
+
+plot_grid(plotlist = mito_count_plots)
+```
+
+```{r}
+qc_sce <- function(sce) {
+  sce[, sce$total_features > 2000 & sce$pct_counts_mito < 50]
+}
+
+sces_qc <- sapply(sces, qc_sce)
+```
+
+```{r}
+remove_rowdata <- function(sce) {
+  rowData(sce)[13:20] <- NULL
+  sce
+}
+
+sces_qc <- lapply(sces_qc, remove_rowdata)
+
+sce <- do.call("cbind", sces_qc)
+```
+
+# Linear modelling of scores
+
+
+```{r}
+make_score <- function(sce, inds) {
+  lc <- t(as.matrix(logcounts(sce)[inds,]))
+  n <- nnmf(lc)
+  score <- n$W[,1]
+  (score - min(score)) / (max(score) - min(score))
+}
+
+hsp_inds <- grep("^HSP|FOS|UBC", rowData(sce)$Symbol)
+immune_inds <- match(c("HLA-A", "HLA-B", "HLA-C", "B2M"), rowData(sce)$Symbol)
+
+sce$hsp_score <- make_score(sce, hsp_inds)
+sce$immune_score <- make_score(sce, immune_inds)
+```
+
+
+```{r}
+sce$prop_counts_mito <- 0.01 * sce$pct_counts_mito
+
+tf <- sce$total_features
+sce$scale_total_features <- (tf - min(tf)) / (max(tf) - min(tf))
+
+sce$norm_digestion_temp <- as.numeric(sce$digestion_temperature) / 42
+
+lm_hsp <- lm(hsp_score ~ scale_total_features + prop_counts_mito + norm_digestion_temp, data = as.data.frame(colData(sce)))
+lm_immune <- lm(immune_score ~ scale_total_features + prop_counts_mito + norm_digestion_temp, data = as.data.frame(colData(sce)))
+```
+
+Tidy into data frame
+
+```{r}
+df_coef <- rbind(
+  tidy(lm_hsp) %>% 
+    mutate(outcome = "Heat shock score"),
+  tidy(lm_immune) %>% 
+    mutate(outcome = "Immune score")
+) %>% 
+  filter(term != "(Intercept)")
+
+df_coef$term <- plyr::mapvalues(df_coef$term,
+                                from = c("prop_counts_mito", "norm_digestion_temp", "scale_total_features"),
+                                to = c("Proportion of counts mitochondrial", "Digestion temperature", "# genes expressed"))
+
+ggplot(df_coef, aes(x = term, y = estimate, fill = term)) +
+  geom_bar(stat = "identity", colour = 'black') +
+  facet_wrap(~ outcome) +
+  coord_flip() +
+  scale_fill_brewer(palette = "Blues") +
+  labs(y = "Coefficient estimate",
+       subtitle = "SA854 (MDA cell line)") +
+  theme_cowplot(font_size = 11) +
+  theme(axis.title.y = element_blank(),
+        legend.position = "none",
+        strip.background = element_rect(fill = 'white')) +
+  geom_hline(yintercept = 0, colour = 'grey10')
+
+ggsave("../../figs/SA854//coefficients_sa854.png", width = 5, height = 2)
+```
+
+
