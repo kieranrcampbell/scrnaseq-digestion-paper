@@ -81,6 +81,8 @@ ggsave("../../figs/SA605X3XB01966/SA605X3XB01966_all_sample_pca.png", width = 7,
 plotPCA(sce, colour_by = "pct_counts_mito")
 plotPCA(sce, colour_by = "pct_counts_ribo")
 plotPCA(sce, colour_by = "total_features")
+
+plotPCA(sce, colour_by = get_ensembl_id("JUNB", sce))
 ```
 
 # TENX003_SA605X3XB01966_001

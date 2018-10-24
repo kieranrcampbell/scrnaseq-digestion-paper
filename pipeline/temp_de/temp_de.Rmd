@@ -134,15 +134,21 @@ fit <- lmFit(v, design)
 fit <- eBayes(fit)
 res <- decideTests(fit)
 
-# Correct the p-values and put into a data frame
-qvals <- p.adjust(fit$p.value[,2], method = 'BH')
+tt <- topTable(fit, 
+               coef = 2,
+               sort.by = "none",
+               number = nrow(sce_de),
+               confint = TRUE)
 
-df_limma <- data_frame(log2foldchange = fit$coefficients[,2], 
-                       pval = fit$p.value[,2],
-                       qval = qvals,
-                       ensembl_id = rownames(sce_de),
-                       gene_symbol = rowData(sce_de)$Symbol,
-                       is_significant = qval < 0.05) 
+df_limma <- as.data.frame(tt) %>% 
+  rownames_to_column('ensembl_gene_id') %>% 
+  as_tibble() %>% 
+  dplyr::mutate(gene_symbol = rowData(sce_de)$Symbol) %>% 
+  dplyr::select(ensembl_gene_id, gene_symbol, everything()) %>% 
+  dplyr::mutate(is_significant = adj.P.Val < 0.05,
+                se = (CI.R - CI.L) / 3.92)
+  
+
 ```
 
 Add in mean expression in each type:
@@ -151,7 +157,7 @@ Add in mean expression in each type:
 mean_exprs_6 <- rowMeans(as.matrix(logcounts(sce_de[, sce_de$digestion_temperature == "6"])))
 mean_exprs_37 <- rowMeans(as.matrix(logcounts(sce_de[, sce_de$digestion_temperature == "37"])))
 
-df_limma <- mutate(df_limma,
+df_limma <- dplyr::mutate(df_limma,
                    mean_exprs_6 = mean_exprs_6,
                    mean_exprs_37 = mean_exprs_37)
 ```
@@ -163,9 +169,9 @@ df_limma <- mutate(df_limma,
 sig_cols <- c("FALSE" = "grey80", "TRUE" = "darkred")
 theme_set(theme_bw(base_size = 11))
 
-df_text <- top_n(df_limma, 25, desc(qval))
+df_text <- top_n(df_limma, 25, desc(adj.P.Val))
 
-ggplot(df_limma, aes(x = log2foldchange, y = -log10(qval), color = is_significant)) +
+ggplot(df_limma, aes(x = logFC, y = -log10(adj.P.Val), color = is_significant)) +
   geom_point(alpha = 0.7) +
   scale_color_manual(values = sig_cols, name = "Significantly differentially expressed") +
   geom_text_repel(data = df_text, aes(label = gene_symbol), color = 'black', size = 2) +
@@ -215,7 +221,7 @@ cam <- rownames_to_column(cam, "pathway")
 
 df_lfc <- lapply(pathways, function(pathway) {
   df_limma[idx[[pathway]], ] %>% 
-  summarise(mean_log2foldchange = median(log2foldchange), pathway = pathway)
+  summarise(mean_log2foldchange = median(logFC), pathway = pathway)
 }) %>% 
   bind_rows()
 

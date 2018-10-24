@@ -32,7 +32,7 @@ suppressPackageStartupMessages({
   library(cowplot)
   library(mclust)
   library(scran)
-  library(NNLM)
+  # library(NNLM)
   library(broom)
 })
 
@@ -58,13 +58,35 @@ mito_count_plots <- lapply(sces, function(sce) {
 plot_grid(plotlist = mito_count_plots)
 ```
 
+
+```{r}
+sces <- lapply(sces, runPCA, ncomponents = 3)
+
+pca_plots <- lapply(sces, plotPCA, colour_by = "pct_counts_mito")
+
+cowplot::plot_grid(plotlist = pca_plots)
+```
+
+
+
 ```{r}
 qc_sce <- function(sce) {
-  sce[, sce$total_features > 2000 & sce$pct_counts_mito < 50]
+  sce[, sce$total_features > 2000 & sce$pct_counts_mito < 10]
 }
 
 sces_qc <- sapply(sces, qc_sce)
 ```
+
+Quick PCA plot:
+
+```{r}
+sces_qc <- lapply(sces_qc, runPCA, ncomponents = 3)
+
+pca_plots <- lapply(sces_qc, plotPCA, colour_by = "pct_counts_mito")
+
+cowplot::plot_grid(plotlist = pca_plots)
+```
+
 
 ```{r}
 remove_rowdata <- function(sce) {

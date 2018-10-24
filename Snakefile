@@ -16,11 +16,15 @@ raw_files = expand("data/raw_10X/{id}/{file}", id=ids, file=files10X)
 scesets_raw = expand("data/scesets/{id}_sceset_raw.rds", id=ids)
 scesets_qc = expand("data/scesets/{id}_sceset_qc.rds", id=ids)
 
+mito_des = expand("data/mito_differential_expression/{id}_mito_de.csv",
+id = ids)
+
 rule all:
     input:
         raw_files,
         scesets_raw,
-        scesets_qc
+        scesets_qc#,
+	#mito_des
 
 rule get_from_shahlab:
     params:
@@ -79,7 +83,17 @@ rule qc_scesets:
         "Rscript -e \"rmarkdown::render('pipeline/qc/sce_qc.Rmd', \
         output_file='{params.curr_dir}/{output.report}', knit_root_dir='{params.curr_dir}', \
         params=list(input_sce_path='{input}', output_sce_path='{output.sce}'))\" "
-        
+
+rule mito_de:
+    input:
+        "data/scesets/{id}_sceset_raw.rds"
+    output:
+        "data/mito_differential_expression/{id}_mito_de.csv"
+    shell:
+        "Rscript pipeline/all_sample_mito/all_sample_mito_de.R --sce_input_file {input} --output_csv {output}"
+    
+
+
         
     
 

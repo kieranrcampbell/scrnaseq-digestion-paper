@@ -45,7 +45,7 @@ read_sce <- function(input_data_path = "input",
   dataset = "hsapiens_gene_ensembl")
 
   
-  # Calculate size factors (using TMM - open to debate)
+  # Calculate size factors
   sce <- scran::computeSumFactors(sce)
   
   

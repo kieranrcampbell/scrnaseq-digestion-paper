@@ -125,7 +125,22 @@ plotPCA(sce, colour_by = get_ensembl_id("OPG"))
 plotExpression(sce, x = "cluster", features = get_ensembl_id("VEGFB"))
 ```
 
+## Complexity of each sample
 
+```{r}
+plot_library_size <- function(sce) {
+  plotColData(sce, x = "cluster", y = "total_counts")
+}
+
+temps <- paste(lapply(sces_qc, function(x) colData(x)$digestion_temperature[1]), "C")
+
+plotlist <- lapply(sces_qc, plot_library_size)
+cowplot::plot_grid(plotlist = plotlist, labels = temps)
+```
+
+```{r}
+ggsave("../../figs/SA854/SA854-mito-cluster-vs-total-counts.png", width = 8, height = 7)
+```
 
 
 # Differential expression
@@ -169,7 +184,7 @@ voom_to_df <- function(fit, sce)  {
 ```
 
 ```{r}
-sces_qc <- lapply(sces_qc, normalize_sce)
+# sces_qc <- lapply(sces_qc, normalize_sce)
 sces_de <- lapply(sces_qc, threshold_sce)
 voom_fits_and_v <- lapply(sces_de, get_vooms)
 fits <- lapply(voom_fits_and_v, `[[`, 'fit')
@@ -425,4 +440,17 @@ cam_cluster <- cameraPR(fit$coefficients[,2], idx)
 cam_temp <- cameraPR(fit$coefficients[,3], idx)
 cam_inter <- cameraPR(fit$coefficients[,4], idx)
 ```
+
+
+# Look at automated QC?
+
+```{r}
+df_qc <- as.data.frame(colData(sce_all)) %>% 
+  as_tibble()
+
+ggplot(df_qc, aes(x = total_counts, y = pct_counts_mito, colour = cluster)) +
+  geom_point() +
+  facet_wrap(~ digestion_temperature)
+```
+
 

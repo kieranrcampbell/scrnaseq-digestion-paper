@@ -1,0 +1,65 @@
+---
+title: "Bayesian core geneset construction"
+output: html_notebook
+---
+
+```{r}
+suppressPackageStartupMessages({
+  library(rstan)
+  library(tidyverse)
+})
+```
+
+```{r}
+rds_files <- dir("../../data/temp_de/", full.names = TRUE, pattern="rds$")
+
+df_de <- map_df(rds_files, readRDS)
+```
+
+```{r}
+df_de <- count(df_de, ensembl_gene_id) %>% 
+  dplyr::filter(n == 7) %>% 
+  inner_join(df_de)
+```
+
+
+```{r}
+model <- stan_model("coregene2.stan")
+```
+
+```{r}
+logfcs <- select(df_de, gene_symbol, comparison, logFC) %>% 
+  spread(gene_symbol, logFC) %>% 
+  select(-comparison) %>% 
+  as.matrix() %>% 
+  t()
+
+ses <- select(df_de, gene_symbol, comparison, se) %>% 
+  spread(gene_symbol, se) %>% 
+  select(-comparison) %>% 
+  as.matrix() %>% 
+  t()
+
+logfcs[is.na(logfcs)] <- 10e5
+ses[is.na(ses)] <- 10e5
+
+is_missing <- 1 * (is.na(logfcs) & is.na(ses))
+
+```
+
+```{r}
+data <- list(
+  G = nrow(logfcs),
+  E = ncol(logfcs),
+  beta_obs = logfcs,
+  beta_se = ses,
+  is_missing = is_missing
+)
+```
+
+```{r}
+fit <- sampling(model, data)
+```
+
+
+

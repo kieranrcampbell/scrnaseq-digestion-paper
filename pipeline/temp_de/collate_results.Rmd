@@ -18,8 +18,6 @@ knitr::opts_chunk$set(echo = TRUE,
                       cache = FALSE)
 
 suppressPackageStartupMessages({
-  library(scater)
-  library(SingleCellExperiment)
   library(tidyverse)
   library(glue)
   library(edgeR)
@@ -399,6 +397,45 @@ print(nrow(df_set))
 ```{r}
 table(df_set$estimate > 0)
 ```
+
+
+# Trying stan
+
+```{r}
+library(rstan)
+```
+
+```{r}
+beta <- dplyr::filter(df_de, grepl("JUNB", gene_symbol)) %>% .$logFC
+se <- dplyr::filter(df_de, grepl("JUNB", gene_symbol)) %>% .$se
+```
+
+```{r}
+data <- list(
+  E = length(beta),
+  beta_obs = beta,
+  beta_se = se
+)
+
+model <- rstan::stan_model("coregene.stan")
+```
+
+
+```{r}
+fit <- sampling(model, data = data)
+```
+
+```{r}
+stan_plot(fit, pars = 'beta')
+stan_hist(fit, pars = 'beta')
+summary(fit, pars = 'beta')
+```
+
+
+
+
+
+
 
 
 
