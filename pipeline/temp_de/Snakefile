@@ -4,8 +4,11 @@ import os
 configfile: "../../config.yaml"
 
 # Parse spreadsheet
-design_df = pd.read_csv(config['temp_de_url'])
-comparisons = list(set(design_df['comparison']))
+design_df = pd.read_csv(config['sample_inventory_url'])
+
+design_df = design_df[design_df.temp_de_comparison > -1]
+
+comparisons = list(set(design_df['temp_de_comparison']))
 sce_ids=list(design_df['id'])
 
 # Input/Output files

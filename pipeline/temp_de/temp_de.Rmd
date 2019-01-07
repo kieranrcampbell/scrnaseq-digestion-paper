@@ -40,7 +40,7 @@ design <- read_csv(params$design_file)
 Get the necessary samples:
 
 ```{r}
-ids <- filter(design, comparison == params$comparison) %>% 
+ids <- filter(design, temp_de_comparison == params$comparison) %>% 
   .$id
 ```
 
@@ -59,7 +59,7 @@ sces <- lapply(sce_paths, readRDS)
 We need to ditch some QC paths:
 
 ```{r}
-rowdata_to_remove <- names(rowData(sces[[1]]))[13:20]
+rowdata_to_remove <- names(rowData(sces[[1]]))[-c(1:5)]
 print(rowdata_to_remove)
 ```
 

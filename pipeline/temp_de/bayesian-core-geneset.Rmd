@@ -23,7 +23,7 @@ df_de <- count(df_de, ensembl_gene_id) %>%
 ```
 
 
-```{r}
+```{r, results='hide'}
 model <- stan_model("coregene2.stan")
 ```
 
@@ -52,14 +52,59 @@ data <- list(
   G = nrow(logfcs),
   E = ncol(logfcs),
   beta_obs = logfcs,
-  beta_se = ses,
-  is_missing = is_missing
+  beta_se = ses#,
+  #is_missing = is_missing
 )
 ```
 
 ```{r}
-fit <- sampling(model, data)
+fit <- sampling(model, data, chains = 1)
 ```
+
+```{r}
+stan_hist(fit, 'phi')
+stan_hist(fit, 'lambda[2]')
+```
+
+```{r}
+s <- summary(fit)
+s <- s$summary
+
+s <- s[grepl("^beta", rownames(s)),]
+```
+
+```{r}
+dfc <- as_tibble(s) %>% 
+  mutate(gene = rownames(logfcs)) %>% 
+  select(gene, everything())
+
+dfc <- dplyr::rename(dfc, lower = `2.5%`, upper = `97.5%`)
+```
+
+```{r}
+dfc_s <- filter(dfc, lower > 0 | upper < 0 )
+
+dfc_s <- arrange(dfc_s, desc(mean))
+
+gene_order <- dfc_s$gene
+dfc_s$gene <- factor(dfc_s$gene, levels = rev(gene_order))
+```
+
+
+
+```{r}
+ggplot(dfc_s, aes(x = mean, y = gene)) +
+  geom_errorbarh(aes(xmin = lower, xmax = upper), colour = 'grey50') +
+  geom_point(aes(fill = mean), shape = 21, colour = 'black') +
+  theme_bw(base_size = 10) +
+  scale_fill_gradient2(low = scales::muted('blue'), high = scales::muted('red'), guide = FALSE) +
+  labs(x = "Combined effect size (95% credible interval)", y = "Gene", subtitle = "Core heat response geneset") 
+
+ggsave("../../figs/coregeneset.png", width = 4, height = 12)
+```
+
+
+
 
 
 

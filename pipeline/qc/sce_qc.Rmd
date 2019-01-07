@@ -39,21 +39,21 @@ sce <- runPCA(sce, ncomponents = 3)
 PCA plots:
 
 ```{r}
-plotPCA(sce, colour_by = "total_features")
+plotPCA(sce, colour_by = "total_features_by_counts")
 plotPCA(sce, colour_by = "pct_counts_mito")
 plotPCA(sce, colour_by = "pct_counts_ribo")
 ```
 
 
 ```{r}
-plotPhenoData(sce, x = "total_features", y = "pct_counts_mito")
-plotPhenoData(sce, x = "total_features", y = "total_counts")
+plotPhenoData(sce, x = "total_features_by_counts", y = "pct_counts_mito")
+plotPhenoData(sce, x = "total_features_by_counts", y = "total_counts")
 ```
 
 Number of cells to retain:
 
 ```{r}
-cells_to_keep <- sce$total_features > sce$filter_total_features & sce$pct_counts_mito < sce$filter_pct_counts_mito
+cells_to_keep <- sce$total_features_by_counts > sce$filter_total_features & sce$pct_counts_mito < sce$filter_pct_counts_mito
 table(cells_to_keep)
 ```
 

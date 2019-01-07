@@ -1,41 +1,30 @@
-library(SingleCellExperiment)
-library(aargh)
-library(scater)
+
+suppressPackageStartupMessages({
+  library(SingleCellExperiment)
+  library(aargh)
+  library(scater)
+  library(jsonlite)
+  library(DropletUtils)
+})
 
 
 read_sce <- function(input_data_path = "input",
                      output_scepath = "output",
-                     id = "id",
-                     sample_id = "sample_id",
-                     batch_id = "batch_id",
-                     sample_type = "sample_type",
-                     cancer_type = "cancer_type",
-                     digestion_temperature = "digestion_temp",
-                     tissue_state = "tissue_state",
-                     enzyme_mix = "enzyme_mix",
-                     jira_ticket = "jira_ticket",
-                     cell_status = "cell_status",
-                     genome = "genome",
-                     filter_total_features = 1000,
-                     filter_pct_counts_mito = 15) {
-
-  sce <- read10XResults(input_data_path)
-
+                     metadata_json = "str") {
   
-  # Add in all the sample data
-  sce$id <- id
-  sce$sample_id <- sample_id
-  sce$batch_id <- batch_id
-  sce$sample_type <- sample_type
-  sce$cancer_type <- cancer_type
-  sce$digestion_temperature <- digestion_temperature
-  sce$tissue_state <- tissue_state
-  sce$enzyme_mix <- enzyme_mix
-  sce$jira_ticket <- jira_ticket
-  sce$cell_status <- cell_status
-  sce$genome <- genome
-  sce$filter_total_features <- filter_total_features
-  sce$filter_pct_counts_mito <- filter_pct_counts_mito
+
+  sce <- read10xCounts(input_data_path)
+  
+  mdata <- fromJSON(metadata_json)
+  
+  for(m in sort(names(mdata))) {
+    colData(sce)[[ m ]] <- mdata[[ m ]]
+  }
+  
+  # Need to get rid of hg19_ in front 
+  rownames(sce) <- rownames(rowData(sce)) <- rowData(sce)$ID <- gsub("hg19_", "", rownames(sce))
+  rowData(sce)$Symbol <- gsub("hg19_", "", rowData(sce)$Symbol)
+  
 
   rowData(sce)$ensembl_gene_id <- rownames(sce)
   
@@ -52,6 +41,9 @@ read_sce <- function(input_data_path = "input",
   # Compute log normal expression values
   sce <- normalize(sce)
   
+  # Compute doublet scores
+  sce$doublet_score <- scran::doubletCells(sce)
+  
   # Get Mitochondrial genes for QC:
   mt_genes <- which(rowData(sce)$chromosome_name == "MT")
   ribo_genes <- grepl("^RP[LS]", rowData(sce)$Symbol)
@@ -64,7 +56,7 @@ read_sce <- function(input_data_path = "input",
 
   
   # Make sure colnames are unique
-  colnames(sce) <- paste0(id, "_", sce$Barcode)
+  colnames(sce) <- paste0(metadata(sce)$id, "_", sce$Barcode)
   
   # Save to output
   saveRDS(sce, output_scepath)
