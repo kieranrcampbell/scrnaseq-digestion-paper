@@ -120,8 +120,9 @@ ggplot(df_ridge, aes(x = value, y = id, group = id)) +
   facet_grid(~ measure, scales = "free_x") +
   labs(y = "Experiment") +
   # ggsci::scale_fill_npg(name = "Sample type") +
-  theme_ridges(grid = FALSE, font_size = 11, center_axis_labels = TRUE) +
+  theme_ridges(grid = FALSE, font_size = 10, center_axis_labels = TRUE) +
   theme(axis.text.y = element_blank(),
+        axis.text.x = element_text(size = 8),
         legend.position = "top") +
   theme(axis.title.x = element_blank(),
         strip.text = element_text(face = "bold"),
@@ -138,7 +139,7 @@ ridge_plot <- last_plot()
 ## Check box
 
 ```{r}
-df_grid <- select(coldata_all, id, sample_type, cancer_type, digestion_temperature, tissue_state)
+df_grid <- select(coldata_all, id, sample_type, cancer_type, digestion_temperature, tissue_state, cell_status)
 df_grid <- gather(df_grid, pheno, value, -id) %>% 
   distinct()
 
@@ -147,8 +148,14 @@ df_grid <- mutate(df_grid,
          pheno == "cancer_type" ~ "Cancer\ntype",
          pheno == "sample_type" ~ "Substrate",
          pheno == "digestion_temperature" ~ "Digestion\ntemperature",
-         pheno == "tissue_state" ~ "Tissue\nstate"
+         pheno == "tissue_state" ~ "Tissue\nstate",
+         pheno == "cell_status" ~ "Cell\nstatus"
        ))
+
+df_grid$pheno_new <- factor(
+  df_grid$pheno_new,
+  levels = c("Cell\nstatus", "Substrate", "Cancer\ntype", "Digestion\ntemperature", "Tissue\nstate" )
+)
 
 df_grid$value <- stringr::str_to_title(df_grid$value)
 df_grid$value <- gsub("_", "\n", df_grid$value)
@@ -156,10 +163,10 @@ df_grid$value[df_grid$value == "Pdx"] <- "PDX"
 df_grid$value[df_grid$value == "Digested\nfresh" | df_grid$value == "None"] <- "Fresh"
 
 ggplot(df_grid, aes(x = value, y = id, fill = pheno_new)) +
-  geom_point(size = 4, shape = 21, colour = 'grey20') +
+  geom_point(size = 2, shape = 21, colour = 'grey20') +
   facet_grid(~ pheno_new, scales = "free_x", space = "free_x") +
   scale_fill_brewer(palette = "Spectral", guide = F) +
-  labs(y = "Sample") +
+  labs(y = "Dark2") +
   theme_bw() +
   theme(axis.title = element_blank(),
         axis.ticks.y = element_blank(),
@@ -179,52 +186,34 @@ cowplot::plot_grid(ridge_plot,
 ggsave("../../figs/all_sample_analyses/all_sample_overview.png", width = 10, height = 8)
 ```
 
-# Overall effect sizes through regression
-
 ```{r}
-df_reg <- select(coldata_all, id, sample_type, cancer_type, digestion_temperature, tissue_state,
-                 pct_counts_mito, total_features_by_counts, total_counts)
-```
+umap_plot <- readRDS("../../figs/all_sample_analyses/umap_all.rds")
 
-```{r}
-fit_mito <- lm(pct_counts_mito ~ sample_type + cancer_type + digestion_temperature + tissue_state, data = df_reg) %>% 
-  tidy() %>% 
-  mutate(response = "% mito")
+# umap_plot <- umap_plot + theme(legend.position = "bottom") +
+#   geom_point(aes(colour = sample_type), alpha = 0.5, size = 0.01)
 
-fit_total_features <- lm(total_features_by_counts ~ sample_type + cancer_type + digestion_temperature + tissue_state, data = df_reg) %>% 
-  tidy() %>% 
-  mutate(response = "Total genes detected")
-
-fit_total_counts <- lm(total_counts ~ sample_type + cancer_type + digestion_temperature + tissue_state, data = df_reg) %>% 
-  tidy() %>% 
-  mutate(response = "Total UMIs")
-
-```
-
-
-```{r}
-fit_mito2 <- lm(pct_counts_mito ~ sample_type + cancer_type + digestion_temperature + tissue_state + id, data = df_reg) %>% 
-  tidy() %>% 
-  mutate(response = "% mito")
-```
-
-
-
-
-```{r}
-df_metrics <- bind_rows(
-  fit_mito,
-  fit_total_features,
-  fit_total_counts
+upper_grid <- cowplot::plot_grid(
+  ridge_plot, grid_plot,
+  labels = c("a", "b"),
+  nrow = 1
 )
+
+full_plot <- cowplot::plot_grid(upper_grid,
+                   cowplot::plot_grid(umap_plot, NULL, rel_widths = c(1, 0.02)),
+                   rel_heights = c(2,1.2),
+                   nrow = 2, #axis = 't', align = 'hv',
+                   labels = c("", "c"))
+
+ggsave("../../figs/all_sample_analyses/all_sample_overview.png", plot = full_plot, width = 10, height = 8.5)
 ```
 
-Plot effect size of temperature:
+
+Final stats:
 
 ```{r}
-filter(df_reg, digestion_temperature %in% c(6, 37)) %>% 
-ggplot(aes(x = factor(digestion_temperature), y = pct_counts_mito)) +
-  geom_violin()
+ncells <- print(nrow(coldata_all))
+
+print(glue::glue("We profiled {ncells} cells"))
 ```
 
 

@@ -97,14 +97,14 @@ And let's look at some PCA:
 ```{r}
 sce <- runPCA(sce, ncomponents = 3)
 
-plotPCA(sce, colour_by = "total_features", ncomponents = 3)
+plotPCA(sce, colour_by = "total_features_by_counts", ncomponents = 3)
 plotPCA(sce, colour_by = "digestion_temperature", ncomponents = 2)
 ```
 
 
 
 ```{r}
-plotColData(sce, x = "digestion_temperature", y = "total_features")
+plotColData(sce, x = "digestion_temperature", y = "total_features_by_counts")
 ```
 
 

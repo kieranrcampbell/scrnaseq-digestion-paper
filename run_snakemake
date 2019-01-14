@@ -1,1 +1,2 @@
+sudo docker run --rm -t -v /batchfx/:/batchfx/ -v /root/.ssh/:/root/.ssh/ statgen2 snakemake --unlock -s /batchfx/Snakefile --directory /batchfx --rerun-incomplete
 sudo docker run --rm -t -v /batchfx/:/batchfx/ -v /root/.ssh/:/root/.ssh/ statgen2 snakemake -j $1 -s /batchfx/Snakefile --directory /batchfx --rerun-incomplete

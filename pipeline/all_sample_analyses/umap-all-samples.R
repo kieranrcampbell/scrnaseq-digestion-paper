@@ -71,46 +71,84 @@ um_df <- as_data_frame(um) %>%
          sample_id = colData(sce)$sample_id,
          cancer_type = colData(sce)$cancer_type,
          digestion_temperature = colData(sce)$digestion_temperature,
-         tissue_state = colData(sce)$tissue_state)
+         tissue_state = colData(sce)$tissue_state,
+         cell_status = colData(sce)$cell_status)
+
+um_df <- mutate(um_df, 
+                sample_type = case_when(
+                  sample_type == "cell_line" ~ "Cell line",
+                  sample_type == "patient" ~ "Patient",
+                  TRUE ~ "PDX"
+                ))
+
+
+cols <- c(
+  "Cell line"="#1d3554",
+  "Patient"="#42858C",
+  "PDX"="#570D32"
+)
+
 
 ggplot(um_df, aes(x = V1, y = V2)) +
-  geom_point(aes(colour = sample_id)) +
-  labs(x = "UMAP1", y = "UMAP2")
-
-ggsave("../../figs/umap_all.png", width = 10, height = 8)
-
-ggplot(um_df, aes(x = V1, y = V2)) +
-  geom_point(aes(colour = id)) +
-  labs(x = "UMAP1", y = "UMAP2")
-
-ggplot(um_df, aes(x = V1, y = V2)) +
-  geom_point(aes(colour = sample_type))
-
-ggplot(um_df, aes(x = V1, y = V2)) +
-  geom_point(aes(colour = cancer_type))
-
-ggplot(um_df, aes(x = V1, y = V2)) +
-  geom_point(aes(colour = digestion_temperature))
-
-ggplot(um_df, aes(x = V1, y = V2)) +
-  geom_point(aes(colour = tissue_state))
+  geom_point(aes(colour = sample_type), alpha = 0.5, size = 0.1) +
+  labs(x = "UMAP1", y = "UMAP2") +
+  scale_color_manual(values = cols) +
+  labs(x = "UMAP1", y = "UMAP2") +
+  cowplot::theme_cowplot(font_size = 11) +
+  theme(legend.title = element_blank())
 
 
-reducedDims(sce)[["UMAP"]] <- um
 
-plotReducedDim(sce, "UMAP", colour_by = "total_features")
+# Ok we need to tidy up um_df before proceeding
 
-plotReducedDim(sce, "UMAP", colour_by = "pct_counts_mito")
+um_df <- rename(um_df,
+       `Cancer type` = cancer_type,
+       Substrate = sample_type,
+       `Digestion temperature` = digestion_temperature,
+       `Tissue state` = tissue_state,
+       `Cell status` = cell_status)
+
+um_df <- mutate(um_df,
+                `Cell status` = stringr::str_to_title(`Cell status`),
+                `Tissue state` = case_when(
+                  `Tissue state` == 'digested_fresh' ~ "Fresh",
+                  `Tissue state` == "frozen" ~ "Frozen",
+                  TRUE ~ "Fresh"
+                ),
+                `Digestion temperature` = as.factor(`Digestion temperature`)
+                )
+
+base_plot <- ggplot(um_df, aes(x = V1, y = V2)) +
+  labs(x = "UMAP1", y = "UMAP2") +
+  labs(x = "UMAP1", y = "UMAP2") +
+  cowplot::theme_cowplot(font_size = 7) +
+  theme(legend.position = "top") +
+  guides(colour = guide_legend(override.aes = list(size=2)))
+
+plt1 <- base_plot + 
+  geom_point(aes(colour = `Cell status`), size = 0.1) +
+  scale_colour_brewer(palette = "Set1", name = "Cell status")
+
+plt2 <- base_plot + 
+  geom_point(aes(colour = Substrate), size = 0.1) +
+  scale_colour_brewer(palette = "Set2")
+
+plt3 <- base_plot +
+  geom_point(aes(colour = `Tissue state`), size = 0.1) +
+  scale_colour_brewer(palette = "Dark2", name = "Tissue state")
+
+plt4 <- base_plot +
+  geom_point(aes(colour = `Digestion temperature`), size = 0.1) +
+  scale_colour_brewer(palette = "Blues", name = "Digestion temperature")
 
 
-pca <- prcomp(lc)
+plot_grid(
+  plt1, plt2, plt3, plt4,
+  nrow = 1
+)
 
-pca_df <- as_data_frame(pca$x[,1:2]) %>% 
-  mutate(sample_type = colData(sce)$sample_type,
-         sample_id = colData(sce)$sample_id,
-         cancer_type = colData(sce)$cancer_type,
-         digestion_temperature = colData(sce)$digestion_temperature,
-         tissue_state = colData(sce)$tissue_state)
 
-ggplot(pca_df, aes(x = PC1, y = PC2)) +
-  geom_point(aes(colour = sample_id)) 
+saveRDS(last_plot(),
+        "../../figs/all_sample_analyses/umap_all.rds")
+
+

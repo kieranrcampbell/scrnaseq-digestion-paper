@@ -1,0 +1,39 @@
+import pandas as pd
+import os
+
+configfile: "../../config.yaml"
+
+# Parse spreadsheet
+design_df = pd.read_csv(config['sample_inventory_url']).dropna()
+
+sce_ids=list(design_df['id'])
+
+# Input/Output files
+scesets_qc = expand("../../data/scesets/{id}_sceset_qc.rds", id=sce_ids)
+
+umap_fig = "../../figs/all_sample_analyses/umap_all.rds"
+overview_fig = "../../figs/all_sample_analyses/all_sample_overview.png"
+
+# Output files
+
+
+rule all:
+    input:
+        overview_fig
+
+
+rule umap:
+    input:
+        scesets_qc
+    output:
+        umap_fig
+    shell:
+        "Rscript umap-all-samples.R"
+
+rule overview:
+    input:
+        scesets_qc, umap_fig
+    output:
+        overview_fig,"metric_overview.html"
+    shell:
+        "Rscript -e \"rmarkdown::render('metric_overview.Rmd')\" "

@@ -22,9 +22,16 @@ pathway_tables = expand("../../data/temp_de_pathways/temp_de_pathways_{compariso
 # Write design to file
 design_df.to_csv(design_file)
 
+# Output files
+coreset_files = ["../../figs/temp_de/core_geneset.rds",
+        "../../data/deliverables/scrnaseq-digestion-temperature.gmt",
+        "../../data/temp_de_all.csv"]
+
+
 rule all:
     input:
-        reports,tables,csv_tables,pathway_tables
+        reports,tables,csv_tables,pathway_tables,
+        coreset_files
 
 rule temp_de:
     params:
@@ -54,6 +61,19 @@ rule tables_to_csv:
     shell:
         "Rscript -e \"library(readr); d <- readRDS('{input}'); write_csv(d, '{output}')\" "
 
+rule coregeneset:
+    params:
+        curr_dir = os.getcwd()
+    input:
+        tables
+    output:
+        "../../figs/temp_de/core_geneset.rds",
+        "../../data/deliverables/scrnaseq-digestion-temperature.gmt",
+        "../../data/temp_de_all.csv"
+    shell:
+        "Rscript -e \"rmarkdown::render('{params.curr_dir}/bayesian-core-geneset.Rmd',\
+        knit_root_dir='{params.curr_dir}')\" "
+	
 
 
 

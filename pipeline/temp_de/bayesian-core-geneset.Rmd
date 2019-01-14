@@ -1,14 +1,41 @@
 ---
 title: "Bayesian core geneset construction"
-output: html_notebook
+output:
+  html_document:
+    df_print: paged
 ---
 
 ```{r}
 suppressPackageStartupMessages({
   library(rstan)
   library(tidyverse)
+  library(GSEABase)
 })
+
+select <- dplyr::select
+filter <- dplyr::filter
+arrange <- dplyr::arrange
 ```
+
+```{r}
+mapping = c(
+  "1"="SA854 (MDA-MB-231 TNBC cell line)",
+  "2"="SA604X9XB2413 (TNBC PDX)",
+  "3"="SA604X9XB2417 (TNBC PDX, prev. treated)",
+  "4"="SA604X8XB02164 (TNBC PDX)",
+  "5" ="SA604X7XB02089 (TNBC PDX)",
+  "6"="SA604X6XB01979 (TNBC PDX)",
+  "7"="PBC04106 (Breast patient sample)",
+  "8"="VOA11267 (HGSC patient sample)",
+  "9"="PBC04573 (Breast patient sample)",
+  "10"="PBC04633 (Breast patient sample)",
+  "11"="VOA11294C (HGSC patient sample)",
+  "12"="VOA11294F (HGSC patient sample)",
+  "13"="SA604X9XB2417 (TNBC PDX)",
+  "14"="SA535X5XB02887 (TNBC PDX)"
+)
+```
+
 
 ```{r}
 rds_files <- dir("../../data/temp_de/", full.names = TRUE, pattern="rds$")
@@ -17,13 +44,20 @@ df_de <- map_df(rds_files, readRDS)
 ```
 
 ```{r}
+df_de$description <- plyr::mapvalues(df_de$comparison, from = names(mapping), to = mapping)
+
+df_de <- filter(df_de, !grepl("patient", description))
+```
+
+
+```{r}
 df_de <- count(df_de, ensembl_gene_id) %>% 
-  dplyr::filter(n == 7) %>% 
+  dplyr::filter(n > 5) %>% 
   inner_join(df_de)
 ```
 
 
-```{r, results='hide'}
+```{r}
 model <- stan_model("coregene2.stan")
 ```
 
@@ -58,12 +92,14 @@ data <- list(
 ```
 
 ```{r}
-fit <- sampling(model, data, chains = 1)
+set.seed(1234L)
+fit <- vb(model, data, grad_samples = 3)
 ```
+
+
 
 ```{r}
 stan_hist(fit, 'phi')
-stan_hist(fit, 'lambda[2]')
 ```
 
 ```{r}
@@ -81,8 +117,15 @@ dfc <- as_tibble(s) %>%
 dfc <- dplyr::rename(dfc, lower = `2.5%`, upper = `97.5%`)
 ```
 
+Add in core gene set genes
+
 ```{r}
-dfc_s <- filter(dfc, lower > 0 | upper < 0 )
+dfc <- mutate(dfc, in_heat_geneset = lower > 0 | upper < 0)
+```
+
+
+```{r}
+dfc_s <- filter(dfc, in_heat_geneset, abs(mean) > 0.5)
 
 dfc_s <- arrange(dfc_s, desc(mean))
 
@@ -98,13 +141,35 @@ ggplot(dfc_s, aes(x = mean, y = gene)) +
   geom_point(aes(fill = mean), shape = 21, colour = 'black') +
   theme_bw(base_size = 10) +
   scale_fill_gradient2(low = scales::muted('blue'), high = scales::muted('red'), guide = FALSE) +
-  labs(x = "Combined effect size (95% credible interval)", y = "Gene", subtitle = "Core heat response geneset") 
-
-ggsave("../../figs/coregeneset.png", width = 4, height = 12)
+  labs(x = "Combined effect size (95% credible interval)", 
+       y = "Gene", 
+       subtitle = "Core heat response geneset with effect size > 0.5") 
 ```
 
+Save the figure:
 
+```{r}
+saveRDS(
+  last_plot(),
+  "../../figs/temp_de/core_geneset.rds"
+)
+```
 
+Save core geneset results to RDS:
+
+```{r}
+heat_genes <- filter(dfc, in_heat_geneset) %>% .$gene
+
+gs <- GeneSet(heat_genes, geneIdType = SymbolIdentifier(), setName = "scrnaseq-digestion-temperature")
+
+toGmt(gs, "../../data/deliverables/scrnaseq-digestion-temperature.gmt")
+```
+
+And save the full data frame
+
+```{r}
+write_csv(dfc, "../../data/temp_de_all.csv")
+```
 
 
 
