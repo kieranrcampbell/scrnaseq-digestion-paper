@@ -142,11 +142,77 @@ filter(df_de, is_hsp | is_mito) %>%
 ```
 
 
-
 ```{r}
 saveRDS(last_plot(), "../../figs/temp_de/conserved-response.rds")
 ```
 
+
+
+```{r}
+filter(df_de, is_hsp | is_mito) %>% 
+  mutate(gene_symbol = fct_reorder(gene_symbol, logFC, .desc = TRUE)) %>% 
+  ggplot(aes(x = gene_symbol, y = logFC)) +
+  # geom_boxplot(aes(fill = gene_type), outlier.shape = NA, size = 0.5) +
+  geom_line(aes(group = description)) + 
+  geom_point(shape = 21, aes(fill = gene_type), colour = 'grey80', size = 2) +
+  theme_bw() +
+  theme(legend.title = element_blank(),
+        axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+        legend.position = c(.8,.8),
+        legend.box.background = element_rect(colour = "black")) +
+  scale_fill_manual(
+    values = c("Heat shock protein gene"=muted("red"),
+               "Mitochondrial gene"=muted("blue"))
+  ) +
+  labs(x = "Gene", y = "log FC with digestion temperature")
+```
+
+Cross plot:
+
+```{r}
+df_hm <- filter(df_de, is_hsp | is_mito)
+
+# Life is too short to do this intelligently
+unique_descriptions <- unique(df_hm$description)
+
+dfs <- lapply(unique_descriptions, function(x) {
+  dplyr::select(df_hm, gene_symbol, logFC, description) %>% 
+    filter(description == x) %>% 
+    dplyr::select(-description)
+})
+
+names(dfs) <- unique_descriptions
+
+combinations <- expand.grid(unique_descriptions, unique_descriptions)
+
+df_all <- bind_rows(
+  apply(combinations, 1, function(x) {
+    inner_join(dfs[[ x[1] ]], dfs[[ x[2] ]], by = "gene_symbol")
+  })
+)
+
+
+filter(df_all, logFC.x != logFC.y) %>% 
+  inner_join(select(df_hm, gene_symbol, gene_type)) %>% 
+  ggplot(aes(x = logFC.x, y = logFC.y)) +
+  geom_point(aes(fill = gene_type), shape = 21, colour = 'lightgrey', size = 2, alpha = 0.1) +
+  guides(fill = guide_legend(override.aes = list(alpha = 1))) +
+  scale_fill_manual(
+  values = c("Heat shock protein gene"=muted("red"),
+  "Mitochondrial gene"=muted("blue"))
+  ) +
+  cowplot::theme_cowplot(font_size = 10) +
+  theme(legend.position = c(0.05, 0.9),
+        legend.title = element_blank(),
+        legend.box.background = element_rect(colour = "black")) +
+  labs(x = "logFC experiment 1", y = "logFC experiment 2")
+
+ggsave("../../figs/temp_de/conservation_of_response.png", width = 4, height = 4)
+```
+
+```{r}
+saveRDS(last_plot(), "../../figs/temp_de/conserved-response.rds")
+```
 
 
 # Collated pathway analysis

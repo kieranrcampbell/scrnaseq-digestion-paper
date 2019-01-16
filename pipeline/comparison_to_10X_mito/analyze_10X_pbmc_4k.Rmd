@@ -1,0 +1,95 @@
+---
+title: "Analyze 10X PBMC_4k data"
+author: "Kieran R Campbell"
+output:
+  html_document: 
+    toc: true
+    toc_float: true
+  html_notebook: default
+params:
+  output_file: "output.rds"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      cache = FALSE)
+
+suppressPackageStartupMessages({
+  library(scater)
+  library(DropletUtils)
+  library(SingleCellExperiment)
+})
+```
+
+Downloaded from https://support.10xgenomics.com/single-cell-gene-expression/datasets/2.1.0/pbmc4k
+
+Read in the data:
+
+```{r}
+sce <- read10xCounts("../../data/raw_10X/10X_pbmc_4k/filtered_gene_bc_matrices/GRCh38")
+print(sce)
+```
+
+Add relevant info:
+
+```{r}
+
+rowData(sce)$ensembl_gene_id <- rownames(sce)
+
+sce <- getBMFeatureAnnos(sce, filters = "ensembl_gene_id",
+attributes = c("ensembl_gene_id", "hgnc_symbol", "entrezgene",
+"start_position", "end_position", "chromosome_name"),
+dataset = "hsapiens_gene_ensembl")
+
+
+# Get Mitochondrial genes for QC:
+mt_genes <- which(rowData(sce)$chromosome_name == "MT")
+ribo_genes <- grepl("^RP[LS]", rowData(sce)$Symbol)
+feature_ctrls <- list(mito = rownames(sce)[mt_genes],
+                      ribo = rownames(sce)[ribo_genes])
+
+sce <- normalize(sce)
+
+# Calculate QC metrics
+sce <- calculateQCMetrics(sce, feature_controls = feature_ctrls)
+```
+
+
+Run PCA first:
+
+```{r}
+sce <- runPCA(sce, ncomponents = 3)
+```
+
+PCA plots:
+
+```{r}
+plotPCA(sce, colour_by = "total_features_by_counts")
+plotPCA(sce, colour_by = "pct_counts_mito")
+plotPCA(sce, colour_by = "pct_counts_ribo")
+```
+
+
+```{r}
+plotPhenoData(sce, x = "total_features_by_counts", y = "pct_counts_mito")
+plotPhenoData(sce, x = "total_features_by_counts", y = "total_counts")
+```
+
+```{r}
+sce2 <- sce[, sce$pct_counts_mito < 30]
+
+sce2 <- runPCA(sce2, ncomponents = 3)
+
+plotPCA(sce2, colour_by = "pct_counts_mito")
+
+plotPhenoData(sce2, x = "total_features_by_counts", y = "pct_counts_mito")
+```
+
+
+```{r}
+plotPhenoData(sce, x = "total_features_by_counts", y = "pct_counts_mito") +
+  labs(x = "Total genes deteced", y = "% transcripts mitochondrial",
+       subtitle = "PBMC 4k")
+
+saveRDS(last_plot(), params$output_file)
+```

@@ -12,7 +12,7 @@ parameters {
   real phi;
   real<lower = 0> lambda[G];
   
-  real beta[G];
+  real eta[G];
   real<lower = 0> sigma[G];
   
 
@@ -22,15 +22,15 @@ model {
   
   phi ~ normal(0, 1);
   
-  beta ~ normal(phi, lambda);
+  eta ~ normal(phi, lambda);
   lambda ~ student_t(4, 0, 1);
   sigma ~ student_t(4, 0, 1);
   
   for(g in 1:G) {
     for(e in 1:E) {
-      //if(is_missing[g,e] == 0) {
-        beta_obs[g,e] ~ normal(beta[g], sqrt(sigma[g]^2 + beta_se[g,e]^2));
-      //}
+      if(is_missing[g,e] == 0) {
+        beta_obs[g,e] ~ normal(eta[g], sqrt(sigma[g]^2 + beta_se[g,e]^2));
+      }
     }
   }
   

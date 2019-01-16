@@ -31,6 +31,9 @@ remove_hg19 <- function(sce) {
   rownames(sce) <- new_rownames
   # rowData(sce)$ID <- new_ID
   # rowData(sce)$Symbol <- new_Symbol
+  
+  sce$GSC_BRC <- NULL
+  
   sce
 }
 
@@ -61,18 +64,21 @@ highvar[is.na(highvar)] <- FALSE
 
 lc <- t(as.matrix(logcounts(sce[highvar,])))
 
+set.seed(2453L)
 um <- umap(lc)
 
 plot(um)
 
 um_df <- as_data_frame(um) %>% 
-  mutate(sample_type = colData(sce)$sample_type,
+  dplyr::mutate(sample_type = colData(sce)$sample_type,
          id = colData(sce)$id,
          sample_id = colData(sce)$sample_id,
          cancer_type = colData(sce)$cancer_type,
          digestion_temperature = colData(sce)$digestion_temperature,
          tissue_state = colData(sce)$tissue_state,
-         cell_status = colData(sce)$cell_status)
+         cell_status = colData(sce)$cell_status,
+         pct_counts_mito = colData(sce)$pct_counts_mito,
+         pct_counts_ribo = colData(sce)$pct_counts_ribo)
 
 um_df <- mutate(um_df, 
                 sample_type = case_when(
@@ -92,10 +98,26 @@ cols <- c(
 ggplot(um_df, aes(x = V1, y = V2)) +
   geom_point(aes(colour = sample_type), alpha = 0.5, size = 0.1) +
   labs(x = "UMAP1", y = "UMAP2") +
-  scale_color_manual(values = cols) +
+  # scale_color_manual(values = cols) +
   labs(x = "UMAP1", y = "UMAP2") +
   cowplot::theme_cowplot(font_size = 11) +
   theme(legend.title = element_blank())
+
+ggplot(um_df, aes(x = V1, y = V2)) +
+  geom_point(aes(colour = pct_counts_mito), alpha = 0.5, size = 0.1) +
+  labs(x = "UMAP1", y = "UMAP2") +
+  labs(x = "UMAP1", y = "UMAP2") +
+  cowplot::theme_cowplot(font_size = 11) +
+  theme(legend.title = element_blank()) +
+  viridis::scale_colour_viridis()
+
+ggplot(um_df, aes(x = V1, y = V2)) +
+  geom_point(aes(colour = pct_counts_ribo), alpha = 0.5, size = 0.1) +
+  labs(x = "UMAP1", y = "UMAP2") +
+  labs(x = "UMAP1", y = "UMAP2") +
+  cowplot::theme_cowplot(font_size = 11) +
+  theme(legend.title = element_blank()) +
+  viridis::scale_colour_viridis()
 
 
 
