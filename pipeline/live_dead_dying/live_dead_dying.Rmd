@@ -1,0 +1,386 @@
+---
+title: "Analyze live-dead-dying samples"
+author: "Kieran R Campbell"
+output:
+  html_document: 
+    toc: true
+    toc_float: true
+  html_notebook: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      cache = FALSE)
+
+suppressPackageStartupMessages({
+  library(scater)
+  library(DropletUtils)
+  library(SingleCellExperiment)
+  library(biomaRt)
+  library(dplyr)
+  library(limma)
+  library(edgeR)
+  library(tidyverse)
+  library(ggrepel)
+  library(org.Hs.eg.db)
+})
+```
+
+
+Read in the data:
+
+```{r}
+sce_files <- dir("../../data/scesets/", full.names = TRUE, pattern = "SA928")
+
+sce_files <- sce_files[grepl("raw", sce_files)]
+
+sces <- lapply(sce_files, readRDS)
+
+sces <- lapply(sces, function(sce) {
+  rowData(sce)[,-c(1:2)] <- NULL
+  sce
+})
+
+sces[[1]]$GSC_BRC <- NULL
+
+sce <- do.call("cbind", sces)
+```
+
+```{r}
+print(sce)
+```
+
+
+Add relevant info:
+
+```{r}
+
+rowData(sce)$ensembl_gene_id <- rownames(sce)
+
+sce <- getBMFeatureAnnos(sce, filters = "ensembl_gene_id",
+attributes = c("ensembl_gene_id", "hgnc_symbol", "entrezgene",
+"start_position", "end_position", "chromosome_name"),
+dataset = "hsapiens_gene_ensembl")
+
+
+# Get Mitochondrial genes for QC:
+mt_genes <- which(rowData(sce)$chromosome_name == "MT")
+ribo_genes <- grepl("^RP[LS]", rowData(sce)$Symbol)
+feature_ctrls <- list(mito = rownames(sce)[mt_genes],
+                      ribo = rownames(sce)[ribo_genes])
+
+sce <- normalize(sce)
+
+# Calculate QC metrics
+sce <- calculateQCMetrics(sce, feature_controls = feature_ctrls)
+```
+
+
+```{r}
+plotColData(sce, x = "total_counts", y = "total_features_by_counts", colour = "cell_status")
+plotColData(sce, x = "total_features_by_counts", y = "pct_counts_mito", colour = "cell_status")
+```
+
+Turn this into a proper figure for the paper:
+
+```{r}
+col_data <- as_tibble(as.data.frame(colData(sce)))
+
+col_data <- dplyr::mutate(col_data,
+                   cell_status = stringr::str_to_title(cell_status))
+
+
+col_data %>% 
+  ggplot(aes(x = total_features_by_counts, y = pct_counts_mito, fill = cell_status)) +
+  geom_point(data = select(col_data, -cell_status), colour = 'grey80', fill = 'black') +
+  geom_point(alpha = 0.8, size = 2, shape = 21, colour = 'grey30') +
+  cowplot::theme_cowplot() +
+  facet_wrap(~ cell_status) +
+  theme(legend.position = "none",
+        strip.background = element_rect(fill = 'white')) +
+  labs(x = "# genes detected", y = "% counts mitochondrial") +
+  scale_fill_brewer(palette = "Accent") +
+  geom_rug()
+```
+
+```{r}
+col_data %>% 
+  ggplot(aes(x = cell_status, y = pct_counts_mito, fill = cell_status)) +
+  geom_boxplot() +
+  cowplot::theme_cowplot() +
+  theme(legend.position = "none",
+        strip.background = element_rect(fill = 'white')) +
+  labs(x = "# genes detected", y = "% counts mitochondrial") +
+  scale_fill_brewer(palette = "Accent")
+```
+
+
+
+Run PCA first:
+
+```{r}
+sce <- runPCA(sce, ncomponents = 3)
+```
+
+PCA plots:
+
+```{r}
+plotPCA(sce, colour_by = "cell_status")
+plotPCA(sce, colour_by = "total_features_by_counts")
+
+plotPCA(sce, colour_by = "pct_counts_mito", ncomponents = 3)
+plotPCA(sce, colour_by = "pct_counts_ribo")
+
+plotPCA(sce, colour_by = "doublet_score")
+```
+
+# Differential expression
+
+```{r}
+col_data <- dplyr::mutate(col_data,
+       ct = case_when(
+         pct_counts_mito > 10 & cell_status == "Dead" ~ "dead_high",
+         pct_counts_mito <= 10 & cell_status == "Dead" ~ "dead_low",
+         TRUE ~ "live_dying"
+       ))
+```
+
+Filter genes to have > 10 total counts:
+
+```{r}
+qplot(rowData(sce)$total_counts) +
+  scale_x_log10() +
+  geom_vline(xintercept = 10, colour = 'red')
+```
+
+
+```{r}
+counts_per_gene <- rowSums(as.matrix(counts(sce)))
+for_de <- counts_per_gene > 10
+
+sce_de <- sce[for_de,]
+
+
+# Remove all mito genes:
+
+sce_de <- sce_de[!grepl("^MT-", rowData(sce_de)$Symbol),]
+
+# Remove all mito pseudogenes
+
+sce_de <- sce_de[!grepl("^MT", rowData(sce_de)$Symbol),]
+
+# Remove all ribo genes
+
+sce_de <- sce_de[!grepl("^RP[L|S]", rowData(sce_de)$Symbol),]
+```
+
+
+```{r}
+dge <- DGEList(counts(sce_de))
+dge <- calcNormFactors(dge)
+
+col_data$detection_rate <- scale(col_data$total_features_by_counts)[,1]
+
+design <- model.matrix(~ detection_rate + ct, col_data) # Your design matrix here
+
+v <- voom(dge, design, plot = TRUE)
+```
+
+```{r}
+fit <- lmFit(v, design)
+fit <- eBayes(fit)
+res <- decideTests(fit)
+
+tt3 <- topTable(fit, 
+               coef = 3,
+               sort.by = "none",
+               number = nrow(sce_de),
+               confint = TRUE)
+
+tt4 <- topTable(fit, 
+               coef = 4,
+               sort.by = "none",
+               number = nrow(sce_de),
+               confint = TRUE)
+
+df_deadlow <- as.data.frame(tt3) %>% 
+  rownames_to_column('ensembl_gene_id') %>% 
+  as_tibble() %>% 
+  dplyr::mutate(gene_symbol = rowData(sce_de)$Symbol) %>% 
+  dplyr::select(ensembl_gene_id, gene_symbol, everything()) %>% 
+  dplyr::mutate(is_significant = adj.P.Val < 0.05,
+                se = (CI.R - CI.L) / 3.92)
+
+
+df_live_dying <- as.data.frame(tt4) %>% 
+  rownames_to_column('ensembl_gene_id') %>% 
+  as_tibble() %>% 
+  dplyr::mutate(gene_symbol = rowData(sce_de)$Symbol) %>% 
+  dplyr::select(ensembl_gene_id, gene_symbol, everything()) %>% 
+  dplyr::mutate(is_significant = adj.P.Val < 0.05,
+                se = (CI.R - CI.L) / 3.92)
+
+```
+
+And fit a contrast for the two low mito pops:
+
+```{r}
+contrast <- makeContrasts(ctdead_low - ctlive_dying, levels = design)
+
+cfit <- contrasts.fit(fit, contrast)
+cfit <- eBayes(cfit)
+#res <- decideTests(cfit)
+
+tt4 <- topTable(cfit, 
+               coef = 1,
+               sort.by = "none",
+               number = nrow(sce_de),
+               confint = TRUE)
+
+df_c <- as.data.frame(tt4) %>% 
+  rownames_to_column('ensembl_gene_id') %>% 
+  as_tibble() %>% 
+  dplyr::mutate(gene_symbol = rowData(sce_de)$Symbol) %>% 
+  dplyr::select(ensembl_gene_id, gene_symbol, everything()) %>% 
+  dplyr::mutate(is_significant = adj.P.Val < 0.05,
+                se = (CI.R - CI.L) / 3.92)
+```
+
+
+```{r}
+plot_volcano <- function(df_limma, title) {
+  sig_cols <- c("FALSE" = "grey80", "TRUE" = "darkred")
+  theme_set(theme_bw(base_size = 11))
+  
+  df_text1 <- top_n(df_limma, 25, logFC)
+  df_text2 <- top_n(df_limma, 25, desc(logFC))
+  
+  df_text <- bind_rows(df_text1, df_text2)
+  
+  ggplot(df_limma, aes(x = logFC, y = -log10(adj.P.Val), color = is_significant)) +
+    geom_point(alpha = 0.7) +
+    scale_color_manual(values = sig_cols, name = "Significantly differentially expressed") +
+    geom_text_repel(data = df_text, aes(label = gene_symbol), color = 'black', size = 3) +
+    labs(x = paste("logFC", title),
+         y = expression(-log[10]~"(q-value)")) +
+    theme(legend.position = "bottom",
+          legend.box.background = element_rect(linetype = 1, size = 1)) 
+  
+}
+```
+
+```{r}
+capts <- c(
+  "Dead low % mito vs dead high % mito",
+  "Live & dying vs dead high % mito",
+  "Dead low % mito vs live & dying"
+)
+
+plt1 <- plot_volcano(df_deadlow, capts[1])
+plt2 <- plot_volcano(df_live_dying, capts[2])
+plt3 <- plot_volcano(df_c, capts[3])
+```
+
+
+
+```{r}
+full_plot <- cowplot::plot_grid(plt1, plt2, plt3, nrow = 1, labels = "auto")
+
+ggsave("../../figs/live_dead_dying/volcanoes.png", full_plot, width = 14, height = 5)
+```
+
+# Gene set enrichment
+
+
+
+```{r}
+load("../../data/genesets/human_c5_v5p2.rdata")
+go_gs <- Hs.c5
+
+entrezgene_ensembl_map <- as.list(org.Hs.egENSEMBL)
+
+map_ids <- function(entrezgenes) {
+  x <- unlist(entrezgene_ensembl_map[entrezgenes])
+  names(x) <- NULL
+  x
+}
+```
+
+```{r}
+go_gs_ensembl <- lapply(go_gs, map_ids)
+names(go_gs_ensembl) <- sub("GO_", "", names(go_gs_ensembl))
+
+idx <- ids2indices(go_gs_ensembl, id = rownames(fit))
+
+
+cam1 <- camera(v, idx, design, contrast = 3, trend.var = TRUE)
+cam2 <- camera(v, idx, design, contrast = 4, trend.var = TRUE)
+cam3 <- camera(v, idx, design, contrast = c(0, 0, 1, -1), trend.var = TRUE)
+```
+
+Add in data and plot:
+
+```{r}
+f <- function(x, s) {
+  rownames_to_column(x, "pathway") %>% 
+    mutate(comparison = s)
+}
+
+df_camera <- bind_rows(
+  f(cam1, capts[1]),
+  f(cam2, capts[2]),
+  f(cam3, capts[3])
+) %>% 
+  as_tibble()
+```
+
+Textual annotation
+
+```{r}
+df_txt <- group_by(df_camera, factor(comparison)) %>% 
+  top_n(10, desc(FDR))
+```
+
+
+And plot:
+
+```{r}
+ggplot(df_camera, aes(x = Direction, y= -log10(FDR))) +
+  geom_point() +
+  facet_wrap(~ comparison, scales = "free_y") +
+  geom_label_repel(data = df_txt, aes(label = pathway), size = 3)
+```
+
+```{r}
+df_txt <- ungroup(df_txt)
+
+df_txt <- mutate(
+  df_txt,
+  pathway = forcats::fct_reorder(factor(pathway), FDR)
+)
+
+ggplot(df_txt, aes(x = pathway, y = -log10(FDR))) +
+  geom_point(aes(colour = Direction), size = 2) +
+  facet_wrap(~ comparison, scales = "free_x") +
+  coord_flip() +
+  theme_bw(base_size = 10) +
+  scale_colour_manual(values = c("Down"=scales::muted('red'), "Up"=scales::muted('blue'))) +
+  theme(legend.position = "top",
+        strip.background = element_rect(fill = "white"))
+
+ggsave("../../figs/live_dead_dying/pathway_enrichment.png", width = 11, height = 4)
+```
+
+Sanity check:
+
+```{r}
+resp_chain <- go_gs_ensembl$RESPIRATORY_CHAIN
+
+sce_de$ct <- col_data$ct
+
+resp_chain <- resp_chain[ resp_chain %in% rownames(sce_de) ]
+
+plotExpression(sce_de, x = "ct", features = resp_chain[21:40])
+```
+
+

@@ -13,13 +13,14 @@ scesets_qc = expand("../../data/scesets/{id}_sceset_qc.rds", id=sce_ids)
 
 umap_fig = "../../figs/all_sample_analyses/umap_all.rds"
 overview_fig = "../../figs/all_sample_analyses/all_sample_overview.png"
+pct_mito_fig = "../../figs/all_sample_analyses/pct_counts_mito_all_samples.png"
 
 # Output files
 
 
 rule all:
     input:
-        overview_fig
+        overview_fig, pct_mito_fig
 
 
 rule umap:
@@ -34,6 +35,6 @@ rule overview:
     input:
         scesets_qc, umap_fig
     output:
-        overview_fig,"metric_overview.html"
+        overview_fig, pct_mito_fig, "metric_overview.html"
     shell:
         "Rscript -e \"rmarkdown::render('metric_overview.Rmd')\" "

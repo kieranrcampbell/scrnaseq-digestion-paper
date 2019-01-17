@@ -2,6 +2,8 @@
 library(uwot)
 library(scater)
 library(matrixStats)
+library(tidyverse)
+library(cowplot)
 
 theme_set(theme_bw())
 

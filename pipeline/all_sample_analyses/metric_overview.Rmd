@@ -78,7 +78,7 @@ ggplot(coldata_all, aes(x = pct_counts_mito)) +
   scale_x_continuous(expand = c(0,0)) +
   theme_bw()
 
-ggsave("../../figs/all_sample_analyses/pct_counts_mito_all_samples.png", width = 14, height = 10)
+ggsave("../../figs/all_sample_analyses/pct_counts_mito_all_samples.png", width = 20, height = 15)
 ```
 
 Doublet score across all cells:
@@ -179,8 +179,7 @@ grid_plot <- last_plot()
 ```
 
 ```{r}
-cowplot::plot_grid(ridge_plot, 
-                   grid_plot,
+cowplot::plot_grid(grid_plot, ridge_plot, 
                    nrow = 1, axis = 't', align = 'hv')
 
 ggsave("../../figs/all_sample_analyses/all_sample_overview.png", width = 10, height = 8)
@@ -193,7 +192,7 @@ umap_plot <- readRDS("../../figs/all_sample_analyses/umap_all.rds")
 #   geom_point(aes(colour = sample_type), alpha = 0.5, size = 0.01)
 
 upper_grid <- cowplot::plot_grid(
-  ridge_plot, grid_plot,
+  grid_plot,ridge_plot,
   labels = c("a", "b"),
   nrow = 1
 )
