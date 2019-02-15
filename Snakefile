@@ -2,8 +2,11 @@ import pandas as pd
 import os
 import json
 
+# Config options
+configfile: "private_config.yaml"
 
-configfile: "config.yaml"
+
+
 files10X = ['barcodes.tsv', 'genes.tsv', 'matrix.mtx']
 
 
@@ -14,10 +17,10 @@ assert df_inventory.shape[0] == 42
 df_inventory.index = df_inventory['id']
 inventory_dict = df_inventory.to_dict('index')
 
-
 ids = list(inventory_dict.keys())
 
-raw_files = expand("data/raw_10X/{id}/{file}", id=ids, file=files10X)
+raw_10X_files = expand(os.path.join(config['raw_path_local'], "{id}/outs/filtered_feature_bc_matrix/{f}"), id=ids, f=files10X)
+
 scesets_raw = expand("data/scesets/{id}_sceset_raw.rds", id=ids)
 scesets_qc = expand("data/scesets/{id}_sceset_qc.rds", id=ids)
 
@@ -27,29 +30,33 @@ id = ids)
 
 rule all:
     input:
-        raw_files,
-        scesets_raw,
-        scesets_qc
+        #raw_10X_files
+        scesets_raw
+        #scesets_qc
 
-rule get_from_shahlab:
+rule get_from_blob:
     params:
-        shahlab_path=lambda wildcards: inventory_dict[wildcards.id]['shahlab_path'],
-        genome=lambda wildcards: inventory_dict[wildcards.id]['genome']
+        blob_url = config['blob_url'],
+        intermediate_dir = lambda wildcards: os.path.join(config['raw_path_local'], wildcards.id)
     output:
-        expand("data/raw_10X/{{id}}/{file}", file=files10X)
+        expand("{c}/{{id}}/outs/filtered_feature_bc_matrix/{f}", f=files10X, c = config['raw_path_local'])
     shell:
-        "scp thost:{params.shahlab_path}/outs/filtered_gene_bc_matrices/{params.genome}/* data/raw_10X/{wildcards.id}/"
-
+        "wget -P {params.intermediate_dir} {params.blob_url}/{wildcards.id}.tar.gz && \
+        tar -C {params.intermediate_dir} -xzf {params.intermediate_dir}/{wildcards.id}.tar.gz && \
+        gunzip {params.intermediate_dir}/outs/filtered_feature_bc_matrix/* && \
+        mv {params.intermediate_dir}/outs/filtered_feature_bc_matrix/features.tsv {params.intermediate_dir}/outs/filtered_feature_bc_matrix/genes.tsv"
+        
 rule convert_to_sce:
     params:
-        metadata_json=lambda wildcards: json.dumps(inventory_dict[wildcards.id])
+        metadata_json=lambda wildcards: json.dumps(inventory_dict[wildcards.id]),
+        rp = config['raw_path_local']
     input:
-        expand("data/raw_10X/{{id}}/{file}", file=files10X)
+        expand("{c}/{{id}}/outs/filtered_feature_bc_matrix/{f}", f=files10X, c = config['raw_path_local'])
     output:
         "data/scesets/{id}_sceset_raw.rds"
     shell:
         "Rscript pipeline/conversion_to_sceset/convert_to_sceset.R \
-        --input_data_path data/raw_10X/{wildcards.id}/ \
+        --input_data_path {params.rp}/{wildcards.id}/outs/filtered_feature_bc_matrix \
         --output_scepath {output} \
         --metadata_json '{params.metadata_json}'"
 
