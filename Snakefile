@@ -2,13 +2,11 @@ import pandas as pd
 import os
 import json
 
-# Config options
+
 configfile: "private_config.yaml"
 
-
-
-files10X = ['barcodes.tsv', 'genes.tsv', 'matrix.mtx']
-
+files10X_v2 = ['barcodes.tsv', 'genes.tsv', 'matrix.mtx']
+files10X_v3 = ['barcodes.tsv', 'features.tsv', 'matrix.mtx']
 
 df_inventory = pd.read_csv(config['sample_inventory_url']).dropna()
 
@@ -19,10 +17,25 @@ inventory_dict = df_inventory.to_dict('index')
 
 ids = list(inventory_dict.keys())
 
-raw_10X_files = expand(os.path.join(config['raw_path_local'], "{id}/outs/filtered_feature_bc_matrix/{f}"), id=ids, f=files10X)
+cellranger_versions = ['v2','v3']
 
-scesets_raw = expand("data/scesets/{id}_sceset_raw.rds", id=ids)
-scesets_qc = expand("data/scesets/{id}_sceset_qc.rds", id=ids)
+cellranger_outputs_v2 = expand("data/cellranger-v2-outputs/{id}/outs/filtered_gene_bc_matrices/{g}/{f}",
+                               g=config['genome'], f=files10X_v2, id=ids)
+
+cellranger_outputs_v3 = expand("data/cellranger-v3-outputs/{id}/outs/filtered_feature_bc_matrix/{f}",
+                               f=files10X_v3, id=ids)
+
+cellranger_outputs = cellranger_outputs_v2 + cellranger_outputs_v3
+
+# SingleCellExperiments
+sces_raw = expand("data/scesets/{cv}/{id}_sceset_{cv}_raw.rds",
+                  id=ids, cv = cellranger_versions)
+
+
+
+# raw_files_blob = expand("data/raw_scrna_blob/{id}/{file}", id=ids, file=files10X)
+# scesets_raw = expand("data/scesets/{id}_sceset_raw.rds", id=ids)
+# scesets_qc = expand("data/scesets/{id}_sceset_qc.rds", id=ids)
 
 mito_des = expand("data/mito_differential_expression/{id}_mito_de.csv",
 id = ids)
@@ -30,35 +43,68 @@ id = ids)
 
 rule all:
     input:
-        #raw_10X_files
-        scesets_raw
-        #scesets_qc
+        cellranger_outputs, sces_raw
 
-rule get_from_blob:
+rule download_from_blob:
     params:
-        blob_url = config['blob_url'],
-        intermediate_dir = lambda wildcards: os.path.join(config['raw_path_local'], wildcards.id)
+        base_url = config['blob_base_url']
     output:
-        expand("{c}/{{id}}/outs/filtered_feature_bc_matrix/{f}", f=files10X, c = config['raw_path_local'])
+        "data/cellranger-{cv}-outputs/{id}.tar.gz"
     shell:
-        "wget -P {params.intermediate_dir} {params.blob_url}/{wildcards.id}.tar.gz && \
-        tar -C {params.intermediate_dir} -xzf {params.intermediate_dir}/{wildcards.id}.tar.gz && \
-        gunzip {params.intermediate_dir}/outs/filtered_feature_bc_matrix/* && \
-        mv {params.intermediate_dir}/outs/filtered_feature_bc_matrix/features.tsv {params.intermediate_dir}/outs/filtered_feature_bc_matrix/genes.tsv"
-        
-rule convert_to_sce:
+        "wget -P data/cellranger-{wildcards.cv}-outputs/ {params.base_url}{wildcards.cv}/{wildcards.id}.tar.gz"
+
+rule extract_cellranger_v2:
+    input:
+        "data/cellranger-v2-outputs/{id}.tar.gz"
+    output:
+        expand("data/cellranger-v2-outputs/{{id}}/outs/filtered_gene_bc_matrices/{g}/{f}",
+               g = config['genome'], f = files10X_v2)
+    shell:
+        # Snakemake has already created the directory!
+        "tar -C data/cellranger-v2-outputs/{wildcards.id} -xzf {input}"
+
+rule extract_cellranger_v3:
+    input:
+        "data/cellranger-v3-outputs/{id}.tar.gz"
+    output:
+        expand("data/cellranger-v3-outputs/{{id}}/outs/filtered_feature_bc_matrix/{f}",
+               f = files10X_v3)
+    shell:
+        "tar -C data/cellranger-v3-outputs/{wildcards.id} -xzf {input} && \
+        gunzip data/cellranger-v3-outputs/{wildcards.id}/outs/filtered_feature_bc_matrix/*"
+
+
+
+rule convert_to_sce_v2:
     params:
         metadata_json=lambda wildcards: json.dumps(inventory_dict[wildcards.id]),
-        rp = config['raw_path_local']
+        genome=config['genome']
     input:
-        expand("{c}/{{id}}/outs/filtered_feature_bc_matrix/{f}", f=files10X, c = config['raw_path_local'])
+        expand("data/cellranger-v2-outputs/{{id}}/outs/filtered_gene_bc_matrices/{g}/{f}",
+               g = config['genome'], f = files10X_v2)
     output:
-        "data/scesets/{id}_sceset_raw.rds"
+        "data/scesets/v2/{id}_sceset_v2_raw.rds"
     shell:
         "Rscript pipeline/conversion_to_sceset/convert_to_sceset.R \
-        --input_data_path {params.rp}/{wildcards.id}/outs/filtered_feature_bc_matrix \
+        --input_data_path data/cellranger-v2-outputs/{wildcards.id}/outs/filtered_gene_bc_matrices/{params.genome}/ \
         --output_scepath {output} \
         --metadata_json '{params.metadata_json}'"
+
+rule convert_to_sce_v3:
+    params:
+        metadata_json=lambda wildcards: json.dumps(inventory_dict[wildcards.id])
+    input:
+        expand("data/cellranger-v2-outputs/{{id}}/outs/filtered_gene_bc_matrices/{g}/{f}",
+               g = config['genome'], f = files10X_v2)
+    output:
+        "data/scesets/v3/{id}_sceset_v3_raw.rds"
+    shell:
+        "Rscript pipeline/conversion_to_sceset/convert_to_sceset.R \
+        --input_data_path data/cellranger-v3-outputs/{wildcards.id}/outs/filtered_feature_bc_matrix/ \
+        --output_scepath {output} \
+        --metadata_json '{params.metadata_json}'"
+
+        
 
 rule qc_scesets:
     params:
