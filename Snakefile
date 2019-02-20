@@ -30,6 +30,8 @@ cellranger_outputs = cellranger_outputs_v2 + cellranger_outputs_v3
 # SingleCellExperiments
 sces_raw = expand("data/scesets/{cv}/{id}_sceset_{cv}_raw.rds",
                   id=ids, cv = cellranger_versions)
+sces_qc = expand("data/scesets/{cv}/{id}_sceset_{cv}_qc.rds",
+                  id=ids, cv = cellranger_versions)
 
 
 
@@ -43,7 +45,9 @@ id = ids)
 
 rule all:
     input:
-        cellranger_outputs, sces_raw
+        cellranger_outputs,
+        sces_raw,
+        sces_qc
 
 rule download_from_blob:
     params:
@@ -110,10 +114,10 @@ rule qc_scesets:
     params:
         curr_dir = os.getcwd()
     input:
-        "data/scesets/{id}_sceset_raw.rds"
+        "data/scesets/{cv}/{id}_sceset_{cv}_raw.rds"
     output:
-        sce="data/scesets/{id}_sceset_qc.rds",
-        report="reports/qc/qc_report_{id}.html"
+        sce="data/scesets/{cv}/{id}_sceset_{cv}_qc.rds",
+        report="reports/qc/{cv}/qc_report_{id}_{cv}.html"
     shell:
         "Rscript -e \"rmarkdown::render('pipeline/qc/sce_qc.Rmd', \
         output_file='{params.curr_dir}/{output.report}', knit_root_dir='{params.curr_dir}', \

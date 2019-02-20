@@ -7,23 +7,59 @@ suppressPackageStartupMessages({
   library(DropletUtils)
 })
 
+#' Work out whether we're dealing with V2 or V3
+#'
+workout_v2v3 <- function(path) {
+  files <- dir(path)
+  
+  if("genes.tsv" %in% files) {
+    return(2)
+  } 
+  if("features.tsv" %in% files) {
+    return(3)
+  }
+  stop("Input not recognized as V2 or V3")
+}
+
+
+#' Read 10X accounting for V2 and V3 differences
+read_10X <- function(path) {
+  version <- workout_v2v3(path)
+  
+  if(version == 2) {
+    return(read10xCounts(path))
+  }
+  
+  if(version == 3) {
+    d <- tempdir()
+    files <- dir(path, full.names = TRUE)
+    for(f in files) {
+      file.copy(f, d)
+    }
+    file.rename(file.path(d, "features.tsv"), file.path(d, "genes.tsv"))
+    
+    sce <- read10xCounts(d)
+    rowData(sce)[,3] <- NULL
+    return(sce)
+  }
+  
+  stop("Only V2 and V3 currently supported")
+}
+
 
 read_sce <- function(input_data_path = "input",
                      output_scepath = "output",
                      metadata_json = "str") {
   
 
-  sce <- read10xCounts(input_data_path)
+  sce <- read_10X(input_data_path)
   
+
   mdata <- fromJSON(metadata_json)
   
   for(m in sort(names(mdata))) {
     colData(sce)[[ m ]] <- mdata[[ m ]]
   }
-  
-  # Need to get rid of hg19_ in front 
-  rownames(sce) <- rownames(rowData(sce)) <- rowData(sce)$ID <- gsub("hg19_", "", rownames(sce))
-  rowData(sce)$Symbol <- gsub("hg19_", "", rowData(sce)$Symbol)
   
 
   rowData(sce)$ensembl_gene_id <- rownames(sce)

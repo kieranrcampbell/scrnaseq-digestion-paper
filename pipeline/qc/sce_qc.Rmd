@@ -28,13 +28,49 @@ sce <- readRDS(params$input_sce_path)
 print(sce)
 ```
 
-# Reduced dimension plots
+# QC
+
+Pre-qc plots:
+
+```{r}
+plotPhenoData(sce, x = "total_features_by_counts", y = "pct_counts_mito")
+plotPhenoData(sce, x = "total_features_by_counts", y = "total_counts")
+```
+
+
+Number of cells to retain:
+
+```{r}
+cells_to_keep <- sce$total_features_by_counts > sce$filter_total_features & sce$pct_counts_mito < sce$filter_pct_counts_mito
+table(cells_to_keep)
+```
+
+```{r}
+sce <- sce[,cells_to_keep]
+print(sce)
+```
+
+
+# Recompute size factors
+
+```{r}
+sce <- scran::computeSumFactors(sce)
+```
+
+# Reduced dimension visualization
 
 Run PCA first:
 
 ```{r}
 sce <- runPCA(sce, ncomponents = 3)
 ```
+
+```{r}
+set.seed(123L)
+sce <- runTSNE(sce)
+sce <- runUMAP(sce)
+```
+
 
 PCA plots:
 
@@ -48,18 +84,6 @@ plotPCA(sce, colour_by = "pct_counts_ribo")
 ```{r}
 plotPhenoData(sce, x = "total_features_by_counts", y = "pct_counts_mito")
 plotPhenoData(sce, x = "total_features_by_counts", y = "total_counts")
-```
-
-Number of cells to retain:
-
-```{r}
-cells_to_keep <- sce$total_features_by_counts > sce$filter_total_features & sce$pct_counts_mito < sce$filter_pct_counts_mito
-table(cells_to_keep)
-```
-
-```{r}
-sce <- sce[,cells_to_keep]
-print(sce)
 ```
 
 And save to file:
