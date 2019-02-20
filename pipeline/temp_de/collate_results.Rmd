@@ -1,5 +1,5 @@
 ---
-title: "Temperature differential expression collation"
+title: "Temperature differential expression collation for cellranger `r params$cellranger_version`"
 author: "Kieran R Campbell"
 output:
   html_document: 
@@ -7,7 +7,7 @@ output:
     toc_float: true
   html_notebook: default
 params:
-  comparison: 1
+  cellranger_version: v2
   design_file: design.csv
   output_rds: output.rds
 ---
@@ -30,11 +30,13 @@ suppressPackageStartupMessages({
   library(forcats)
   library(scales)
 })
+
+select <- dplyr::select
 ```
 
 
 ```{r}
-rds_files <- dir("../../data/temp_de/", full.names = TRUE, pattern="rds$")
+rds_files <- dir(glue("../../data/temp_de/{params$cellranger_version}"), full.names = TRUE, pattern="rds$")
 
 df_de <- map_df(rds_files, readRDS)
 ```
@@ -117,7 +119,7 @@ ggplot(df_de, aes(x = logFC, y = -log10(adj.P.Val))) +
 
 
 ```{r}
-ggsave("../../figs/temp_de/all_sample_volcano.png", width = 12, height = 7)
+ggsave(glue("../../figs/temp_de/all_sample_volcano-{params$cellranger_version}.png"), width = 12, height = 7)
 ```
 
 
@@ -143,7 +145,7 @@ filter(df_de, is_hsp | is_mito) %>%
 
 
 ```{r}
-saveRDS(last_plot(), "../../figs/temp_de/conserved-response.rds")
+saveRDS(last_plot(), glue("../../figs/temp_de/boxplot-conserved-response-{params$cellranger_version}.rds"))
 ```
 
 
@@ -207,11 +209,11 @@ filter(df_all, logFC.x != logFC.y) %>%
         legend.box.background = element_rect(colour = "black")) +
   labs(x = "logFC experiment 1", y = "logFC experiment 2")
 
-ggsave("../../figs/temp_de/conservation_of_response.png", width = 4, height = 4)
+ggsave(glue("../../figs/temp_de/conservation_of_response-{params$cellranger_version}.png"), width = 4, height = 4)
 ```
 
 ```{r}
-saveRDS(last_plot(), "../../figs/temp_de/conserved-response.rds")
+saveRDS(last_plot(), glue("../../figs/temp_de/conserved-response-{params$cellranger_version}.rds"))
 ```
 
 
@@ -219,7 +221,7 @@ saveRDS(last_plot(), "../../figs/temp_de/conserved-response.rds")
 
 ```{r}
 
-csv_files <- dir("../../data/temp_de_pathways/", full.names = TRUE, pattern="csv$")
+csv_files <- dir(glue("../../data/temp_de_pathways/{params$cellranger_version}"), full.names = TRUE, pattern="csv$")
 
 df_pt <- map_df(csv_files, read_csv)
 ```
@@ -270,7 +272,7 @@ ggplot(sum_df, aes(y = description, x = pathway, fill = w_log10FDR)) +
 ```
 
 ```{r}
-saveRDS(last_plot(), "../../figs/temp_de/temp_pathway.rds")
+saveRDS(last_plot(), glue("../../figs/temp_de/temp_pathway-{params$cellranger_version}.rds"))
 ```
 
 

@@ -3,12 +3,15 @@ title: "Bayesian core geneset construction"
 output:
   html_document:
     df_print: paged
+params:
+  cellranger_version: v3
 ---
 
 ```{r}
 suppressPackageStartupMessages({
   library(rstan)
   library(tidyverse)
+  library(glue)
   library(GSEABase)
 })
 
@@ -38,7 +41,7 @@ mapping = c(
 
 
 ```{r}
-rds_files <- dir("../../data/temp_de/", full.names = TRUE, pattern="rds$")
+rds_files <- dir(glue("../../data/temp_de/{params$cellranger_version}"), full.names = TRUE, pattern="rds$")
 
 df_de <- map_df(rds_files, readRDS)
 ```
@@ -151,7 +154,7 @@ Save the figure:
 ```{r}
 saveRDS(
   last_plot(),
-  "../../figs/temp_de/core_geneset.rds"
+  glue("../../figs/temp_de/core_geneset-{params$cellranger_version}.rds")
 )
 ```
 
@@ -160,15 +163,15 @@ Save core geneset results to RDS:
 ```{r}
 heat_genes <- filter(dfc, in_heat_geneset) %>% .$gene
 
-gs <- GeneSet(heat_genes, geneIdType = SymbolIdentifier(), setName = "scrnaseq-digestion-temperature")
+gs <- GeneSet(heat_genes, geneIdType = SymbolIdentifier(), setName = glue("scrnaseq-digestion-temperature-{params$cellranger_version}"))
 
-toGmt(gs, "../../data/deliverables/scrnaseq-digestion-temperature.gmt")
+toGmt(gs, glue("../../data/deliverables/scrnaseq-digestion-temperature-{params$cellranger_version}.gmt"))
 ```
 
 And save the full data frame
 
 ```{r}
-write_csv(dfc, "../../data/temp_de_all.csv")
+write_csv(dfc, glue("../../data/temp_de_all-{params$cellranger_version}.csv"))
 ```
 
 

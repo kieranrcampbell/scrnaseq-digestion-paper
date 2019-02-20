@@ -8,6 +8,7 @@ output:
   html_notebook: default
 params:
   comparison: 1
+  cellranger_version: v2
   design_file: design.csv
   output_rds: output.rds
   pathway_output_csv: output.rds
@@ -47,7 +48,7 @@ ids <- filter(design, temp_de_comparison == params$comparison) %>%
 Format the SCEPaths:
 
 ```{r}
-sce_paths <- sapply(ids, function(id) glue("../../data/scesets/{id}_sceset_qc.rds"))
+sce_paths <- sapply(ids, function(id) glue("../../data/scesets/{params$cellranger_version}/{id}_sceset_{params$cellranger_version}_qc.rds"))
 ```
 
 Read the SCEs:
@@ -66,6 +67,7 @@ print(rowdata_to_remove)
 ```{r}
 sces <- lapply(sces, function(sce) {
   rowData(sce)[rowdata_to_remove] <- NULL
+  reducedDims(sce)[['UMAP']] <- NULL # not computed for all samples
   sce
 })
 ```

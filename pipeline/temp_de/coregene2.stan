@@ -28,9 +28,9 @@ model {
   
   for(g in 1:G) {
     for(e in 1:E) {
-      if(is_missing[g,e] == 0) {
+      // if(is_missing[g,e] == 0) {
         beta_obs[g,e] ~ normal(eta[g], sqrt(sigma[g]^2 + beta_se[g,e]^2));
-      }
+      // }
     }
   }
   
