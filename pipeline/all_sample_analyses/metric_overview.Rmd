@@ -1,11 +1,16 @@
 ---
-title: "All sample comparison of mitochondrial tissues"
+title: "All sample comparison of tissues for Cellranger version `r params$cellranger_version`"
 author: "Kieran R Campbell"
 output:
   html_document: 
     toc: true
     toc_float: true
   html_notebook: default
+params:
+  cellranger_version: v2
+  input_umap_rds: input.rds
+  output_figure: output.png
+  pct_mito_fig: mito_fig.png
 ---
 
 ```{r setup, include=FALSE}
@@ -19,6 +24,7 @@ suppressPackageStartupMessages({
   library(tidyverse)
   library(ggridges)
   library(broom)
+  library(glue)
 })
 
 # Columns of rowData(sce) that need removed to merge
@@ -44,7 +50,7 @@ remove_cols <- function(sce) {
 Let's grab the list of all the raw scesets:
 
 ```{r}
-all_raw <- dir("../../data/scesets/", pattern = "raw", full.names = TRUE)
+all_raw <- dir(glue("../../data/scesets/{params$cellranger_version}"), pattern = "raw", full.names = TRUE)
 ```
 
 Now get the pct mito from these as well as sample names
@@ -70,7 +76,7 @@ coldata_all <- map_df(all_raw, read_and_get_coldata)
 
 Mitochondrial:
 
-```{r}
+```{r, fig.width = 10, fig.height = 10}
 ggplot(coldata_all, aes(x = pct_counts_mito)) +
   geom_histogram() +
   facet_wrap(~ id, scales = "free_y") +
@@ -78,7 +84,7 @@ ggplot(coldata_all, aes(x = pct_counts_mito)) +
   scale_x_continuous(expand = c(0,0)) +
   theme_bw()
 
-ggsave("../../figs/all_sample_analyses/pct_counts_mito_all_samples.png", width = 20, height = 15)
+ggsave(params$pct_mito_fig, width = 20, height = 15)
 ```
 
 Doublet score across all cells:
@@ -182,14 +188,11 @@ grid_plot <- last_plot()
 cowplot::plot_grid(grid_plot, ridge_plot, 
                    nrow = 1, axis = 't', align = 'hv')
 
-ggsave("../../figs/all_sample_analyses/all_sample_overview.png", width = 10, height = 8)
+# ggsave("../../figs/all_sample_analyses/all_sample_overview-noumap.png", width = 10, height = 8)
 ```
 
 ```{r}
-umap_plot <- readRDS("../../figs/all_sample_analyses/umap_all.rds")
-
-# umap_plot <- umap_plot + theme(legend.position = "bottom") +
-#   geom_point(aes(colour = sample_type), alpha = 0.5, size = 0.01)
+umap_plot <- readRDS(params$input_umap_rds)
 
 upper_grid <- cowplot::plot_grid(
   grid_plot,ridge_plot,
@@ -203,7 +206,7 @@ full_plot <- cowplot::plot_grid(upper_grid,
                    nrow = 2, #axis = 't', align = 'hv',
                    labels = c("", "c"))
 
-ggsave("../../figs/all_sample_analyses/all_sample_overview.png", plot = full_plot, width = 10, height = 8.5)
+ggsave(params$output_figure, plot = full_plot, width = 10, height = 8.5)
 ```
 
 
