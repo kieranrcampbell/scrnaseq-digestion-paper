@@ -1,0 +1,163 @@
+---
+title: "Mitochondrial differential expression for `r params$id`"
+author: "Kieran R Campbell"
+output:
+  html_document: 
+    toc: true
+    toc_float: true
+  html_notebook: default
+params:
+  input_sce: input_sce
+  output_rds: output.rds
+  pathway_output_csv: output.rds
+  id: my_id
+---
+
+This document performs differential expression as a function of mitochondrial gene percentage
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      cache = FALSE)
+
+suppressPackageStartupMessages({
+  library(scater)
+  library(SingleCellExperiment)
+  library(tidyverse)
+  library(glue)
+  library(edgeR)
+  library(limma)
+  library(ggrepel)
+  library(org.Hs.eg.db)
+})
+```
+
+
+```{r}
+sce <- readRDS(params$input_sce)
+```
+
+# Differential expression
+
+First make a second SingleCellExperiment for DE:
+
+```{r}
+counts_per_gene <- rowSums(as.matrix(counts(sce)))
+for_de <- counts_per_gene > 500
+
+sce_de <- sce[for_de,]
+```
+
+And filter out any mito chondrial genes
+
+```{r}
+sce_de <- sce_de[!rowData(sce_de)$is_feature_control_mito,]
+```
+
+
+
+```{r}
+dge <- DGEList(counts(sce_de))
+dge <- calcNormFactors(dge)
+
+design <- model.matrix(~ pct_counts_mito + total_features_by_counts, colData(sce_de)) # Your design matrix here
+
+v <- voom(dge, design, plot = TRUE)
+```
+
+```{r}
+fit <- lmFit(v, design)
+fit <- eBayes(fit)
+res <- decideTests(fit)
+
+tt <- topTable(fit, 
+               coef = 2,
+               sort.by = "none",
+               number = nrow(sce_de),
+               confint = TRUE)
+
+df_limma <- as.data.frame(tt) %>% 
+  rownames_to_column('ensembl_gene_id') %>% 
+  as_tibble() %>% 
+  dplyr::mutate(gene_symbol = rowData(sce_de)$Symbol) %>% 
+  dplyr::select(ensembl_gene_id, gene_symbol, everything()) %>% 
+  dplyr::mutate(is_significant = adj.P.Val < 0.05,
+                se = (CI.R - CI.L) / 3.92)
+  
+
+```
+
+
+
+
+```{r}
+sig_cols <- c("FALSE" = "grey80", "TRUE" = "darkred")
+theme_set(theme_bw(base_size = 11))
+
+df_text <- top_n(df_limma, 25, dplyr::desc(adj.P.Val))
+
+ggplot(df_limma, aes(x = logFC, y = -log10(adj.P.Val), color = is_significant)) +
+  geom_point(alpha = 0.7) +
+  scale_color_manual(values = sig_cols, name = "Significantly differentially expressed") +
+  # geom_text_repel(data = df_text, aes(label = gene_symbol), color = 'black', size = 2) +
+  labs(x = expression(log[2]~"(coefficient of temperature)"),
+       y = expression(-log[10]~"(q-value)")) +
+  theme(legend.position = "bottom",
+        legend.box.background = element_rect(linetype = 1, size = 1)) 
+```
+
+
+```{r}
+df_limma %>% 
+  mutate(id = sce_de$id[1],
+         sample_type = sce_de$sample_type[1]) %>% 
+  write_rds(params$output_rds)
+```
+
+
+# Camera gene set enrichment analysis
+
+
+```{r}
+load("../../data/genesets/human_H_v5p2.rdata")
+go_gs <- Hs.H
+
+entrezgene_ensembl_map <- as.list(org.Hs.egENSEMBL)
+
+map_ids <- function(entrezgenes) {
+  x <- unlist(entrezgene_ensembl_map[entrezgenes])
+  names(x) <- NULL
+  x
+}
+```
+
+```{r}
+go_gs_ensembl <- lapply(go_gs, map_ids)
+names(go_gs_ensembl) <- sub("GO_", "", names(go_gs_ensembl))
+
+idx <- ids2indices(go_gs_ensembl, id = rownames(fit))
+cam <- camera(v, idx, design, trend.var = TRUE)
+```
+
+
+```{r}
+pathways <- names(go_gs_ensembl)
+
+cam <- rownames_to_column(cam, "pathway")
+
+
+df_lfc <- lapply(pathways, function(pathway) {
+  df_limma[idx[[pathway]], ] %>% 
+  summarise(mean_log2foldchange = median(logFC), pathway = pathway)
+}) %>% 
+  bind_rows()
+
+df_gs <- inner_join(cam, df_lfc) %>% 
+  dplyr::mutate(significant = FDR < 0.05) %>% 
+  as_tibble() %>% mutate(id = sce_de$id[1],
+        sample_type = sce_de$sample_type[1])
+
+write_csv(df_gs, params$pathway_output_csv)
+```
+
+
+

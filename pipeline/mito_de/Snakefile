@@ -1,0 +1,94 @@
+import pandas as pd
+import os
+
+configfile: "../../private_config.yaml"
+
+cellranger_versions = ['v2','v3']
+
+# Parse spreadsheet
+design_df = pd.read_csv(config['sample_inventory_url']).dropna()
+
+sce_ids=list(design_df['id'])
+
+# Input/Output files
+scesets_raw = expand("../../data/scesets/{cv}/{id}_sceset_{cv}_raw.rds",
+                    id=sce_ids, cv=cellranger_versions)
+
+reports = expand("../../reports/mito_de/{cv}/mito_de_{id}_{cv}.html",
+                 id=sce_ids, cv = cellranger_versions)
+tables = expand("../../data/mito_de/{cv}/mito_de_results_{id}_{cv}.rds",
+                id=sce_ids, cv = cellranger_versions)
+csv_tables = expand("../../data/mito_de/{cv}/mito_de_results_{id}_{cv}.csv",
+                    id=sce_ids, cv = cellranger_versions)
+pathway_tables = expand("../../data/mito_de_pathways/{cv}/mito_de_pathways_{id}_{cv}.csv",
+                        id=sce_ids, cv = cellranger_versions)
+
+
+# Output reports
+collated_reports = expand("../../figs/temp_de/temp_pathway-{cv}.rds",
+                          cv=cellranger_versions)
+
+# Output files
+coreset_files = expand(["../../figs/mito_de/mito_core_geneset-{cv}.rds",
+                        "../../data/deliverables/scrnaseq-mitochondrial-response-{cv}.gmt",
+                        "../../data/mito_de_all-{cv}.csv"],
+                       cv = cellranger_versions)
+
+
+rule all:
+    input:
+        reports,
+        tables,
+        csv_tables,
+        pathway_tables,
+        coreset_files
+
+rule mito_de:
+    params:
+        curr_dir = os.getcwd()
+    input:
+        sce="../../data/scesets/{cv}/{id}_sceset_{cv}_raw.rds",
+        go_geneset="../../data/genesets/human_c5_v5p2.rdata" # GO pathway annotations
+    output:
+        report="../../reports/mito_de/{cv}/mito_de_{id}_{cv}.html",
+        de_table="../../data/mito_de/{cv}/mito_de_results_{id}_{cv}.rds",
+        pathway_table="../../data/mito_de_pathways/{cv}/mito_de_pathways_{id}_{cv}.csv"
+    shell:
+        "Rscript -e \"rmarkdown::render('{params.curr_dir}/mito_de.Rmd', \
+        output_file='{params.curr_dir}/{output.report}', \
+        knit_root_dir='{params.curr_dir}', \
+        params=list(id='{wildcards.id}', \
+        input_sce='{input.sce}', \
+        output_rds='{params.curr_dir}/{output.de_table}', \
+        pathway_output_csv='{params.curr_dir}/{output.pathway_table}'))\" "
+
+rule tables_to_csv:
+    input:
+        "../../data/mito_de/{cv}/mito_de_results_{id}_{cv}.rds"
+    output:
+        "../../data/mito_de/{cv}/mito_de_results_{id}_{cv}.csv"
+    shell:
+        "Rscript -e \"library(readr); d <- readRDS('{input}'); write_csv(d, '{output}')\" "
+
+
+	
+        
+rule coregeneset:
+    params:
+        curr_dir = os.getcwd()
+    input:
+        tables
+    output:
+        "../../figs/mito_de/mito_core_geneset-{cv}.rds",
+        "../../data/deliverables/scrnaseq-mitochondrial-response-{cv}.gmt",
+        "../../data/mito_de_all-{cv}.csv",
+        report="../../reports/mito_de/coregeneset-{cv}.html"
+    shell:
+        "Rscript -e \"rmarkdown::render('{params.curr_dir}/collate_mito_de.Rmd',\
+        knit_root_dir='{params.curr_dir}', \
+        output_file='{output.report}', \
+        params=list(cellranger_version='{wildcards.cv}'))\" "
+	
+
+
+

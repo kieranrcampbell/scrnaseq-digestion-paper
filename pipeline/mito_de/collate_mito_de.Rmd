@@ -1,0 +1,238 @@
+---
+title: "Collate mitochondrial DE results"
+author: "Kieran R Campbell"
+output:
+  html_document: 
+    toc: true
+    toc_float: true
+  html_notebook: default
+params:
+  cellranger_version: v3
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      cache = FALSE)
+
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(broom)
+  library(ggrepel)
+  library(rstan)
+  library(glue)
+  library(GSEABase)
+})
+
+select <- dplyr::select
+mutate <- dplyr::mutate
+arrange <- dplyr::arrange
+```
+
+# Read in data
+
+```{r}
+dfm <- list.files(glue("../../data/mito_de/{params$cellranger_version}"), pattern = "rds", full.names = TRUE) %>% 
+  map_df(~ readRDS(.))
+```
+
+
+We're going to remove patient samples for this:
+
+```{r}
+dfm <- filter(dfm, sample_type != "patient")
+```
+
+
+# Basic exploration
+
+## What has large and small mean expression?
+
+```{r}
+
+```
+
+
+
+
+# Collate using t-test
+
+First retain genes present in at least 5 datasets:
+
+```{r}
+dfm_filtered <- count(dfm, ensembl_gene_id) %>% 
+  filter(n >= 14) %>% 
+  inner_join(dfm)
+```
+
+
+```{r}
+df_tt <- group_by(dfm_filtered, gene_symbol, ensembl_gene_id) %>%
+  do(ttest = t.test(.$logFC, alternative = "two.sided")) %>% 
+  tidy(ttest) %>% 
+  mutate(q.value = p.adjust(p.value, method = "BH")) %>% 
+  ungroup()
+```
+
+```{r}
+df_ann <- top_n(df_tt, 40, -q.value)
+
+df_ann2 <- top_n(df_tt, 20, abs(estimate))
+
+df_ann <- bind_rows(df_ann, df_ann2) %>% 
+  distinct()
+
+ggplot(df_tt, aes(x = estimate, y = -log10(q.value), colour = q.value < 0.05)) +
+  geom_point() +
+  geom_text_repel(data = df_ann, aes(label = gene_symbol), colour = 'black', size = 3) +
+  cowplot::theme_cowplot(font_size = 11) +
+  scale_colour_manual(values = c("TRUE"="darkred", "FALSE"="grey80"),
+                      name = "In perturbed gene set") +
+  theme(legend.position = "bottom") +
+  labs(x = "Combined estimate ~ mitochondrial percentage")
+  
+```
+
+# Look at localization
+
+```{r}
+loc_df <- read_tsv("../../data/external/RNALocate/all-data.txt",
+                   col_types = list(Gene_ID = col_character()))
+```
+
+```{r}
+loc_df <- filter(df_tt, p.value < 0.05) %>% 
+  select(Gene_Name = gene_symbol, estimate, p.value) %>% 
+  inner_join(loc_df)
+
+```
+
+```{r}
+ggplot(loc_df, aes(x = Subcellular_Localization, y = -log10(p.value))) +
+  geom_boxplot() +
+  coord_flip()
+```
+
+
+
+
+# Modelling using STAN
+
+
+
+
+```{r}
+model <- stan_model("../temp_de/coregene2.stan")
+```
+
+```{r}
+logfcs <- select(dfm_filtered, id, gene_symbol, logFC) %>% 
+  spread(gene_symbol, logFC) %>% 
+  select(-id) %>% 
+  as.matrix() %>% 
+  t()
+
+ses <- select(dfm_filtered, id, gene_symbol, se) %>% 
+  spread(gene_symbol, se) %>% 
+  select(-id) %>% 
+  as.matrix() %>% 
+  t()
+
+is_missing <- 1 * (is.na(logfcs) & is.na(ses))
+
+logfcs[is.na(logfcs)] <- 10e5
+ses[is.na(ses)] <- 10e5
+
+```
+
+```{r}
+data <- list(
+  G = nrow(logfcs),
+  E = ncol(logfcs),
+  beta_obs = logfcs,
+  beta_se = ses,
+  is_missing = is_missing
+)
+```
+
+And fit stan model:
+
+```{r}
+set.seed(1234L)
+fit <- vb(model, data, grad_samples = 3)
+```
+
+```{r}
+stan_hist(fit, 'phi')
+```
+
+```{r}
+s <- summary(fit)
+s <- s$summary
+
+s <- s[grepl("^eta", rownames(s)),]
+```
+
+```{r}
+dfc <- as_tibble(s) %>% 
+  mutate(gene = rownames(logfcs)) %>% 
+  select(gene, everything())
+
+dfc <- dplyr::rename(dfc, lower = `2.5%`, upper = `97.5%`)
+```
+
+Add in core gene set genes
+
+```{r}
+dfc <- mutate(dfc, in_mito_geneset = lower > 0 | upper < 0)
+```
+
+
+```{r}
+dfc_s <- filter(dfc, in_mito_geneset, abs(mean) > 0.03)
+
+dfc_s <- arrange(dfc_s, desc(mean))
+
+gene_order <- dfc_s$gene
+dfc_s$gene <- factor(dfc_s$gene, levels = rev(gene_order))
+```
+
+
+
+```{r, fig.width = 6, fig.height = 9}
+ggplot(dfc_s, aes(x = mean, y = gene)) +
+  geom_errorbarh(aes(xmin = lower, xmax = upper), colour = 'grey50') +
+  geom_point(aes(fill = mean), shape = 21, colour = 'black') +
+  theme_bw(base_size = 10) +
+  scale_fill_gradient2(low = scales::muted('purple'), high = scales::muted('green'), guide = FALSE) +
+  labs(x = "Combined effect size (95% credible interval)", 
+       y = "Gene", 
+       subtitle = "Core mitochondrial response geneset with effect size > 0.05") 
+```
+
+Save the figure:
+
+```{r}
+saveRDS(
+  last_plot(),
+  glue("../../figs/mito_de/mito_core_geneset-{params$cellranger_version}.rds")
+)
+```
+
+Save core geneset results to RDS:
+
+```{r}
+mito_genes <- filter(dfc, in_mito_geneset) %>% .$gene
+
+gs <- GeneSet(mito_genes, geneIdType = SymbolIdentifier(), setName = glue("scrnaseq-mitochondrial-response-{params$cellranger_version}"))
+
+toGmt(gs, glue("../../data/deliverables/scrnaseq-mitochondrial-response-{params$cellranger_version}.gmt"))
+```
+
+And save the full data frame
+
+```{r}
+write_csv(dfc, glue("../../data/mito_de_all-{params$cellranger_version}.csv"))
+```
+
+
+
