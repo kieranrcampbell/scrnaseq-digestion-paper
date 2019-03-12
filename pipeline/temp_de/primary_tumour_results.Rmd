@@ -9,8 +9,10 @@ output:
 params:
   cellranger_version: v3
   pseudobulk: FALSE
+  pdx_cl_de_csv: de.csv
   volcano_plot: volcano.png
   grid_plot: grid.png
+  pathway_plot: pathway.png
 ---
 
 
@@ -31,13 +33,22 @@ select <- dplyr::select
 Load in data
 
 ```{r}
-csv_files <- dir(glue("../../data/primary_tumour_temp_de/{params$cellranger_version}"),
-                 full.names = TRUE, pattern = as.character(params$pseudobulk))
+de_csv_files <- dir(glue("../../data/primary_tumour_temp_de/{params$cellranger_version}"),
+                 full.names = TRUE, pattern = paste0("DE.*.", as.character(params$pseudobulk)))
+
+pathway_csv_files <- dir(glue("../../data/primary_tumour_temp_de/{params$cellranger_version}"),
+                 full.names = TRUE, pattern = paste0("pathway.*.", as.character(params$pseudobulk)))
 ```
 
 ```{r}
-df <- map_dfr(csv_files, read_csv)
+df <- map_dfr(de_csv_files, read_csv)
 ```
+
+
+```{r}
+de_pdx_cl <- read_csv(params$pdx_cl_de_csv)
+```
+
 
 # Volcano plots
 
@@ -63,13 +74,27 @@ ggsave(params$volcano_plot, width = 15, height = 6)
 
 
 
-# HSP plots
+# Core gene set
+
+Construct core gene set
 
 ```{r}
-df_hsp <- filter(df, grepl("^HSP", gene_symbol)) %>% 
+coregene_df <- filter(de_pdx_cl, adj.P.Val < 0.05, logFC > log2(1.5))
+```
+
+Let's take the top 40 genes
+
+```{r}
+coregenes <- top_n(coregene_df, 40, abs(logFC)) %>% .$ensembl_gene_id
+```
+
+
+
+```{r}
+df_cg <- filter(df, ensembl_gene_id %in% coregenes) %>% 
   mutate(significant = adj.P.Val < 0.05)
 
-ggplot(df_hsp, aes(y = cell_type, x = gene_symbol, size = logFC)) +
+ggplot(df_cg, aes(y = cell_type, x = forcats::fct_reorder(gene_symbol, -logFC), size = logFC)) +
   geom_point(aes(fill = logFC, colour = significant), shape = 21) +
   scale_fill_gradient2(low = scales::muted("blue"), high = scales::muted("red"), name = "log(fold change)") +
   # cowplot::theme_cowplot(font_size = 11) +
@@ -77,12 +102,40 @@ ggplot(df_hsp, aes(y = cell_type, x = gene_symbol, size = logFC)) +
   theme(legend.text = element_text(colour = 'black')) +
   scale_colour_manual(values = c("TRUE"="black", "FALSE"="grey90"), guide = FALSE) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
-        legend.position = "top") +
+        legend.position = "bottom") +
   scale_size(guide = FALSE) +
-  labs(x = "Heat shock protein", y = "Cell type")
+  labs(x = "Digestion temperature associated gene", y = "Cell type")
 ```
 
 ```{r}
-ggsave(params$grid_plot, width = 8, height = 5)
+ggsave(params$grid_plot, width = 9, height = 4.5)
+```
+
+# Pathway plot
+
+```{r}
+dfp <- map_dfr(pathway_csv_files, read_csv)
+```
+
+```{r}
+dfp$pathway <- gsub("HALLMARK_", "", dfp$pathway)
+dfp$pathway <- forcats::fct_reorder(dfp$pathway, -log10(dfp$FDR))
+```
+
+
+```{r}
+ggplot(dfp, aes(x = cell_type, y = pathway)) +
+  geom_point(aes(size = -log10(FDR), colour = Direction, alpha = significant)) +
+  scale_alpha_manual(values = c("TRUE"=.8, "FALSE"=0), guide = FALSE) +
+    theme_bw() +
+  theme(legend.text = element_text(colour = 'black')) +
+  labs(x = "Cell type", y = "Pathway") +
+  scale_colour_manual(values = c("Up"=scales::muted("red"),"Down"=scales::muted("blue"))) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  
+```
+
+```{r}
+ggsave(params$pathway_plot, width = 7, height = 10)
 ```
 

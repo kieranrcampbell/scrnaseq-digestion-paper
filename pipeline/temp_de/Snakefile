@@ -19,10 +19,16 @@ sces_qc = expand("../../data/scesets/{cv}/{id}_sceset_{cv}_qc.rds",
 
 
 
-primary_tumour_csvs = expand("../../data/primary_tumour_temp_de/{cv}/DE_results_{ct}_pseudobulk_{pb}.csv",
+primary_tumour_de_csvs = expand("../../data/primary_tumour_temp_de/{cv}/DE_results_{ct}_pseudobulk_{pb}.csv",
                              cv=cellranger_versions,
                              ct=cell_types,
                              pb=pseudobulk)
+
+primary_tumour_pathway_csvs = expand("../../data/primary_tumour_temp_de/{cv}/pathway_results_{ct}_pseudobulk_{pb}.csv",
+                             cv=cellranger_versions,
+                             ct=cell_types,
+                             pb=pseudobulk)
+
 
 pt_figs = expand("../../figs/primary_tumour_temp_de/{fn}_{cv}_pseudobulk_{pb}.png",
                  fn = ['volcano','grid'],
@@ -46,11 +52,8 @@ pdx_cl_figs = expand("../../figs/pdx_cl_temp_de/{fn}_{cv}_pseudobulk_{pb}.png",
 
 rule all:
     input:
-        primary_tumour_csvs,
-        pt_figs,
-        pdx_cl_de_csvs,
-        pdx_cl_pathway_csvs,
-        pdx_cl_figs
+        primary_tumour_de_csvs, primary_tumour_pathway_csvs, pt_figs,
+        pdx_cl_de_csvs, pdx_cl_pathway_csvs, pdx_cl_figs
 
 
 rule pdx_cl_de:
@@ -101,7 +104,8 @@ rule primary_tumour_de:
     input:
         sce="../../data/primary_tumour_analysis/v1/sce_final_annotated/{cv}.rds"
     output:
-        csv="../../data/primary_tumour_temp_de/{cv}/DE_results_{ct}_pseudobulk_{pb}.csv",
+        de_csv="../../data/primary_tumour_temp_de/{cv}/DE_results_{ct}_pseudobulk_{pb}.csv",
+        pathway_csv="../../data/primary_tumour_temp_de/{cv}/pathway_results_{ct}_pseudobulk_{pb}.csv",
         report="../../reports/primary_tumour_temp_de/primary_tumour_de_{cv}_{ct}_pseudobulk_{pb}.html"
     shell:
         "Rscript -e \"rmarkdown::render('primary_tumour_temp_de.Rmd', \
@@ -111,17 +115,23 @@ rule primary_tumour_de:
         cell_type='{wildcards.ct}', \
         input_sce='{input.sce}', \
         pseudobulk='{wildcards.pb}',\
-        output_csv='{output.csv}'))\" "    
+        de_csv='{output.de_csv}',\
+        pathway_csv='{output.pathway_csv}'))\" "    
 
 rule primary_tumour_figs:
     params:
         curr_dir=os.getcwd()
     input:
-        csvs=expand("../../data/primary_tumour_temp_de/{{cv}}/DE_results_{ct}_pseudobulk_{{pb}}.csv",
-                    ct=cell_types)
+        de_csvs=expand("../../data/primary_tumour_temp_de/{{cv}}/DE_results_{ct}_pseudobulk_{{pb}}.csv",
+                    ct=cell_types),
+        pathway_csvs=expand("../../data/primary_tumour_temp_de/{{cv}}/pathway_results_{ct}_pseudobulk_{{pb}}.csv",
+                    ct=cell_types),
+        pdx_cl_de_csv="../../data/pdx_cl_temp_de/{cv}/DE_results_pseudobulk_{pb}.csv",
+
     output:
         volcano="../../figs/primary_tumour_temp_de/volcano_{cv}_pseudobulk_{pb}.png",
         grid="../../figs/primary_tumour_temp_de/grid_{cv}_pseudobulk_{pb}.png",
+        pathway="../../figs/primary_tumour_temp_de/pathway_{cv}_pseudobulk_{pb}.png",
         report="../../reports/primary_tumour_temp_de/collated_report_{cv}_pseudobulk_{pb}.html"
     shell:
         "Rscript -e \"rmarkdown::render('primary_tumour_results.Rmd', \
@@ -130,4 +140,6 @@ rule primary_tumour_figs:
         params=list(cellranger_version='{wildcards.cv}', \
         volcano_plot='{output.volcano}',\
         grid_plot='{output.grid}',\
+        pathway_plot='{output.pathway}',\
+        pdx_cl_de_csv='{input.pdx_cl_de_csv}',\
         pseudobulk='{wildcards.pb}'))\" "    

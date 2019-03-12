@@ -11,7 +11,8 @@ params:
   pseudobulk: FALSE
   cellranger_version: v3
   cell_type: "Myofibroblast"
-  output_csv: output.csv
+  de_csv: output.csv
+  pathway_csv: output.csv
 ---
 
 This document performs differential expression for the following config:
@@ -138,12 +139,16 @@ tryCatch({
   qvals <- p.adjust(fit$p.value[,ncol(fit)], method = 'BH')
 },
  error = function(e) {
-   f <- file(params$output_csv)
+   f <- file(params$de_csv)
    writeLines("ensembl_gene_id,logFC,AveExpr,t,P.Value,adj.P.Val,B,gene_symbol,cell_type,cellranger_version", 
               f)
    close(f)
-   knitr::knit_exit()
- })
+   
+  f <- file(params$pathway_csv)
+  writeLines("pathway,NGenes,Direction,PValue,FDR,mean_log2foldchange,significant,cell_type", f)
+  close(f)
+  knitr::knit_exit()
+})
 
 ```
 
@@ -183,7 +188,53 @@ Add in the cell type
 tt$cell_type <- params$cell_type
 tt$cellranger_version <- params$cellranger_version
 
-write_csv(tt, params$output_csv)
+write_csv(tt, params$de_csv)
+```
+
+
+# Camera gene set enrichment analysis
+
+
+```{r}
+load("../../data/genesets/human_H_v5p2.rdata")
+go_gs <- Hs.H
+
+entrezgene_ensembl_map <- as.list(org.Hs.egENSEMBL)
+
+map_ids <- function(entrezgenes) {
+  x <- unlist(entrezgene_ensembl_map[entrezgenes])
+  names(x) <- NULL
+  x
+}
+```
+
+```{r}
+go_gs_ensembl <- lapply(go_gs, map_ids)
+names(go_gs_ensembl) <- sub("GO_", "", names(go_gs_ensembl))
+
+idx <- ids2indices(go_gs_ensembl, id = rownames(fit))
+cam <- camera(v, idx, design, trend.var = TRUE)
+```
+
+
+```{r}
+pathways <- names(go_gs_ensembl)
+
+cam <- rownames_to_column(cam, "pathway")
+
+
+df_lfc <- lapply(pathways, function(pathway) {
+  tt[idx[[pathway]], ] %>% 
+  summarise(mean_log2foldchange = mean(logFC), pathway = pathway)
+}) %>% 
+  bind_rows()
+
+df_gs <- inner_join(cam, df_lfc) %>% 
+  dplyr::mutate(significant = FDR < 0.05,
+                cell_type = params$cell_type) %>% 
+  as_tibble()
+
+write_csv(df_gs, params$pathway_csv)
 ```
 
 
