@@ -1,0 +1,205 @@
+---
+title: "PDX and cell line temperature DE"
+author: "Kieran R Campbell"
+output:
+  html_document: 
+    toc: true
+    toc_float: true
+  html_notebook: default
+params:
+  pseudobulk: FALSE
+  cellranger_version: v3
+  output_csv: output.csv
+---
+
+This document performs differential expression for the following config:
+
+```{r}
+pseudobulk <- as.logical(params$pseudobulk)
+print(params)
+```
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      cache = FALSE)
+
+suppressPackageStartupMessages({
+  library(scater)
+  library(SingleCellExperiment)
+  library(tidyverse)
+  library(glue)
+  library(edgeR)
+  library(limma)
+  library(ggrepel)
+  library(org.Hs.eg.db)
+})
+
+filter <- dplyr::filter
+mutate <- dplyr::mutate
+arrange <- dplyr::arrange
+```
+
+```{r}
+entrezgene_ensembl_map <- as.list(org.Hs.egENSEMBL)
+
+map_ids <- function(entrezgenes) {
+  x <- unlist(entrezgene_ensembl_map[entrezgenes])
+  names(x) <- NULL
+  x
+}
+
+get_summed_counts <- function(sce) {
+  rowSums(as.matrix(counts(sce)))
+}
+```
+
+
+
+Read in data
+
+```{r}
+all_sce_files <- dir(glue("../../data/scesets/{params$cellranger_version}/"),
+                     pattern = "qc", full.names = TRUE)
+
+sces <- lapply(all_sce_files, readRDS)
+```
+
+Now we want to remove any fresh patient samples
+
+```{r}
+sces <- lapply(sces, function(sce) {
+  if(sce$sample_type[1] == "patient") {
+    return(NULL)
+  }
+  if(!(sce$digestion_temperature[1] %in% c(6, 37))) {
+    return(NULL)
+  }
+  sce
+})
+
+sces[sapply(sces, is.null)] <- NULL
+```
+
+
+
+Collapse counts to temperature and patient specific
+
+
+```{r}
+
+if(pseudobulk) {
+
+  count_mat <- sapply(sces, get_summed_counts)
+  
+  ids <- sapply(sces, function(sce) sce$sample_id[1])
+  digestion_temperatures <- sapply(sces, function(sce) sce$digestion_temperature[1])
+} else {
+  sces <- lapply(sces, function(sce) {
+    rowData(sce)[,-c(1:2)] <- NULL
+    reducedDims(sce) <- list()
+    sce
+  })
+  
+  sce <- do.call("cbind", sces)
+  count_mat <- as.matrix(counts(sce))
+  
+  ids <- sce$sample_id
+  digestion_temperatures <- sce$digestion_temperature
+}
+```
+
+
+
+
+
+# Differential expression
+
+Filter out lowly abundant genes
+
+```{r}
+count_mat_filtered <- count_mat[rowSums(count_mat) > 10, ]
+```
+
+
+```{r}
+tryCatch({
+  dge <- DGEList(count_mat_filtered)
+  dge <- calcNormFactors(dge)
+  
+  
+  design <- model.matrix(~ ids + factor(digestion_temperatures == 37))
+  
+  v <- voom(dge, design, plot = TRUE)
+  
+  if(pseudobulk) {
+    corfit <- duplicateCorrelation(v, design, block = factor(ids))
+  } else {
+    corfit <- list(consensus.correlation = NA)
+  }
+  #   
+  
+  if(!is.na(corfit$consensus.correlation)) {
+    fit <- lmFit(v, design, block = factor(patient_ids), correlation = corfit$consensus.correlation)
+  } else {
+    fit <- lmFit(v, design)
+  }
+  
+  fit <- eBayes(fit)
+  res <- decideTests(fit)
+  
+  # Correct the p-values and put into a data frame
+  qvals <- p.adjust(fit$p.value[,ncol(fit)], method = 'BH')
+},
+ error = function(e) {
+   f <- file(params$output_csv)
+   writeLines("ensembl_gene_id,logFC,AveExpr,t,P.Value,adj.P.Val,B,gene_symbol,cell_type,cellranger_version", 
+              f)
+   close(f)
+   knitr::knit_exit()
+ })
+
+```
+
+
+
+```{r}
+tt <- topTable(fit, number = nrow(count_mat_filtered), coef = ncol(fit)) %>% 
+  as.data.frame() %>% 
+  rownames_to_column("ensembl_gene_id") %>% 
+  as_tibble()
+```
+
+```{r}
+tt <- mutate(tt, gene_symbol = mapIds(org.Hs.eg.db,
+                               keys=tt$ensembl_gene_id,
+                               column="SYMBOL",
+                               keytype="ENSEMBL",
+                               multiVals="first")
+)
+```
+
+
+
+```{r}
+tt_annot <- top_n(tt, 30, (abs(logFC)))
+```
+
+```{r}
+ggplot(tt, aes(x = logFC, y = -log10(adj.P.Val))) +
+  geom_point() +
+  geom_text_repel(data = tt_annot, aes(label = gene_symbol))
+```
+
+Add in the cell type
+
+```{r}
+tt$cellranger_version <- params$cellranger_version
+tt$pseudobulk <- pseudobulk
+
+write_csv(tt, params$output_csv)
+```
+
+
+

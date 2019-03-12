@@ -1,0 +1,88 @@
+---
+title: "Primary tumour DE collate results"
+author: "Kieran R Campbell"
+output:
+  html_document: 
+    toc: true
+    toc_float: true
+  html_notebook: default
+params:
+  cellranger_version: v3
+  pseudobulk: FALSE
+  volcano_plot: volcano.png
+  grid_plot: grid.png
+---
+
+
+```{r}
+knitr::opts_chunk$set(echo = TRUE,
+                      cache = FALSE)
+
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(glue)
+  library(ggrepel)
+})
+
+select <- dplyr::select
+```
+
+
+Load in data
+
+```{r}
+csv_files <- dir(glue("../../data/primary_tumour_temp_de/{params$cellranger_version}"),
+                 full.names = TRUE, pattern = as.character(params$pseudobulk))
+```
+
+```{r}
+df <- map_dfr(csv_files, read_csv)
+```
+
+# Volcano plots
+
+```{r}
+df_ann <- filter(df, adj.P.Val < 0.05) %>% 
+  group_by(cell_type) %>% 
+  top_n(20, 1/adj.P.Val)
+```
+
+
+```{r}
+ggplot(df, aes(x = logFC, y = -log10(adj.P.Val)))+
+  geom_point() +
+  facet_wrap(~ cell_type, scales = "free", nrow = 2) +
+  geom_hline(yintercept = -log10(0.05), colour = 'darkred', linetype = 2) +
+  cowplot::theme_cowplot(font_size = 11) +
+  geom_label_repel(aes(label = gene_symbol), data = df_ann, size = 2)
+```
+
+```{r}
+ggsave(params$volcano_plot, width = 15, height = 6)
+```
+
+
+
+# HSP plots
+
+```{r}
+df_hsp <- filter(df, grepl("^HSP", gene_symbol)) %>% 
+  mutate(significant = adj.P.Val < 0.05)
+
+ggplot(df_hsp, aes(y = cell_type, x = gene_symbol, size = logFC)) +
+  geom_point(aes(fill = logFC, colour = significant), shape = 21) +
+  scale_fill_gradient2(low = scales::muted("blue"), high = scales::muted("red"), name = "log(fold change)") +
+  # cowplot::theme_cowplot(font_size = 11) +
+  theme_bw() +
+  theme(legend.text = element_text(colour = 'black')) +
+  scale_colour_manual(values = c("TRUE"="black", "FALSE"="grey90"), guide = FALSE) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+        legend.position = "top") +
+  scale_size(guide = FALSE) +
+  labs(x = "Heat shock protein", y = "Cell type")
+```
+
+```{r}
+ggsave(params$grid_plot, width = 8, height = 5)
+```
+

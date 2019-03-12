@@ -1,129 +1,96 @@
-import pandas as pd
 import os
+import pandas as pd
 
 configfile: "../../private_config.yaml"
 
-cellranger_versions = ['v2','v3']
+cell_types = config['cell_types']
+cellranger_versions = ['v2', 'v3']
+pseudobulk = ['TRUE', 'FALSE']
 
-# Parse spreadsheet
+# Get samples we need
 design_df = pd.read_csv(config['sample_inventory_url']).dropna()
 
-design_df = design_df[design_df.temp_de_comparison > -1]
+design_df = design_df[design_df.sample_type != "patient"]
 
-comparisons = list(set(design_df['temp_de_comparison']))
 sce_ids=list(design_df['id'])
 
-# Input/Output files
-scesets_qc = expand("../../data/scesets/{cv}/{id}_sceset_{cv}_qc.rds",
+sces_qc = expand("../../data/scesets/{cv}/{id}_sceset_{cv}_qc.rds",
                     id=sce_ids, cv=cellranger_versions)
-design_file = "temp_de_design.csv"
-reports = expand("../../reports/temp_de/{cv}/temp_de_{comparison}_{cv}.html",
-                 comparison=comparisons, cv = cellranger_versions)
-tables = expand("../../data/temp_de/{cv}/temp_de_results_{comparison}_{cv}.rds",
-                comparison=comparisons, cv = cellranger_versions)
-csv_tables = expand("../../data/temp_de/{cv}/temp_de_results_{comparison}_{cv}.csv",
-                    comparison=comparisons, cv = cellranger_versions)
-pathway_tables = expand("../../data/temp_de_pathways/{cv}/temp_de_pathways_{comparison}_{cv}.csv",
-                        comparison=comparisons, cv = cellranger_versions)
 
-# Write design to file
 
-if os.path.isfile(design_file):
-    design_df_existing = pd.read_csv(design_file, index_col=0)
 
-    if not design_df.equals(design_df_existing):
-        # Only re-write if changed - this will trigger
-        # a rerun of everthing
-        design_df.to_csv(design_file)
-else:
-    design_df.to_csv(design_file)
+primary_tumour_csvs = expand("../../data/primary_tumour_temp_de/{cv}/DE_results_{ct}_pseudobulk_{pb}.csv",
+                             cv=cellranger_versions,
+                             ct=cell_types,
+                             pb=pseudobulk)
 
-# Output reports
-collated_reports = expand("../../figs/temp_de/temp_pathway-{cv}.rds",
-                          cv=cellranger_versions)
+pt_figs = expand("../../figs/primary_tumour_temp_de/{fn}_{cv}_pseudobulk_{pb}.png",
+                 fn = ['volcano','grid'],
+                 cv = cellranger_versions,
+                 pb = pseudobulk)
 
-# Output files
-coreset_files = expand(["../../figs/temp_de/core_geneset_{cv}.rds",
-        "../../data/deliverables/scrnaseq-digestion-temperature_{cv}.gmt",
-                        "../../data/temp_de_all_{cv}.csv"],
-                       cv = cellranger_versions)
+pdx_cl_csvs = expand("../../data/pdx_cl_temp_de/{cv}/DE_results_pseudobulk_{pb}.csv",
+                             cv=cellranger_versions,
+                             pb=pseudobulk)
 
 
 rule all:
     input:
-        reports,
-        tables,
-        csv_tables,
-        pathway_tables,
-        collated_reports,
-        coreset_files
+        primary_tumour_csvs,
+        pt_figs,
+        pdx_cl_csvs
 
-rule temp_de:
+
+rule pdx_cl_de:
     params:
-        curr_dir = os.getcwd()
+        curr_dir=os.getcwd()
     input:
-        sces=scesets_qc,
-        design=design_file,
-        go_geneset="../../data/genesets/human_c5_v5p2.rdata" # GO pathway annotations
+        sces_qc
     output:
-        report="../../reports/temp_de/{cv}/temp_de_{comparison}_{cv}.html",
-        de_table="../../data/temp_de/{cv}/temp_de_results_{comparison}_{cv}.rds",
-        pathway_table="../../data/temp_de_pathways/{cv}/temp_de_pathways_{comparison}_{cv}.csv"
+        csv="../../data/pdx_cl_temp_de/{cv}/DE_results_pseudobulk_{pb}.csv",
+        report="../../reports/pdx_cl_temp_de/pdx_cl_temp_de_{cv}_pseudobulk_{pb}.html"
     shell:
-        "Rscript -e \"rmarkdown::render('{params.curr_dir}/temp_de.Rmd', \
+        "Rscript -e \"rmarkdown::render('pdx_cl_temp_de.Rmd', \
         output_file='{params.curr_dir}/{output.report}', \
         knit_root_dir='{params.curr_dir}', \
-        params=list(comparison='{wildcards.comparison}', \
-        cellranger_version='{wildcards.cv}', \
-        design_file='{input.design}', \
-        output_rds='{params.curr_dir}/{output.de_table}', \
-        pathway_output_csv='{params.curr_dir}/{output.pathway_table}'))\" "
-
-rule tables_to_csv:
-    input:
-        "../../data/temp_de/{cv}/temp_de_results_{comparison}_{cv}.rds"
-    output:
-        "../../data/temp_de/{cv}/temp_de_results_{comparison}_{cv}.csv"
-    shell:
-        "Rscript -e \"library(readr); d <- readRDS('{input}'); write_csv(d, '{output}')\" "
+        params=list(cellranger_version='{wildcards.cv}', \
+        pseudobulk='{wildcards.pb}',\
+        output_csv='{output.csv}'))\" "    
 
 
-
-rule result_collation:
+rule primary_tumour_de:
     params:
-        curr_dir = os.getcwd()
+        curr_dir=os.getcwd()
     input:
-        tables
+        sce="../../data/primary_tumour_analysis/v1/sce_final_annotated/{cv}.rds"
     output:
-        "../../figs/temp_de/all_sample_volcano-{cv}.png",
-        "../../figs/temp_de/boxplot-conserved-response-{cv}.rds",
-        "../../figs/temp_de/conservation_of_response-{cv}.png",
-        "../../figs/temp_de/conserved-response-{cv}.rds",
-        "../../figs/temp_de/temp_pathway-{cv}.rds",
-        report="../../reports/temp_de/temp_de_collated_{cv}.html"
+        csv="../../data/primary_tumour_temp_de/{cv}/DE_results_{ct}_pseudobulk_{pb}.csv",
+        report="../../reports/primary_tumour_temp_de/primary_tumour_de_{cv}_{ct}_pseudobulk_{pb}.html"
     shell:
-        "Rscript -e \"rmarkdown::render('{params.curr_dir}/collate_results.Rmd',\
+        "Rscript -e \"rmarkdown::render('primary_tumour_temp_de_summed.Rmd', \
+        output_file='{params.curr_dir}/{output.report}', \
         knit_root_dir='{params.curr_dir}', \
-        output_file='{output.report}', \
-        params=list(cellranger_version='{wildcards.cv}'))\" "
-	
-        
-rule coregeneset:
+        params=list(cellranger_version='{wildcards.cv}', \
+        cell_type='{wildcards.ct}', \
+        input_sce='{input.sce}', \
+        pseudobulk='{wildcards.pb}',\
+        output_csv='{output.csv}'))\" "    
+
+rule primary_tumour_figs:
     params:
-        curr_dir = os.getcwd()
+        curr_dir=os.getcwd()
     input:
-        tables
+        csvs=expand("../../data/primary_tumour_temp_de/{{cv}}/DE_results_{ct}_pseudobulk_{{pb}}.csv",
+                    ct=cell_types)
     output:
-        "../../figs/temp_de/core_geneset_{cv}.rds",
-        "../../data/deliverables/scrnaseq-digestion-temperature_{cv}.gmt",
-        "../../data/temp_de_all_{cv}.csv",
-        report="../../reports/temp_de/coregeneset_{cv}.html"
+        volcano="../../figs/primary_tumour_temp_de/volcano_{cv}_pseudobulk_{pb}.png",
+        grid="../../figs/primary_tumour_temp_de/grid_{cv}_pseudobulk_{pb}.png",
+        report="../../reports/primary_tumour_temp_de/collated_report_{cv}_pseudobulk_{pb}.html"
     shell:
-        "Rscript -e \"rmarkdown::render('{params.curr_dir}/bayesian-core-geneset.Rmd',\
+        "Rscript -e \"rmarkdown::render('primary_tumour_results.Rmd', \
+        output_file='{params.curr_dir}/{output.report}', \
         knit_root_dir='{params.curr_dir}', \
-        output_file='{output.report}', \
-        params=list(cellranger_version='{wildcards.cv}'))\" "
-	
-
-
-
+        params=list(cellranger_version='{wildcards.cv}', \
+        volcano_plot='{output.volcano}',\
+        grid_plot='{output.grid}',\
+        pseudobulk='{wildcards.pb}'))\" "    
