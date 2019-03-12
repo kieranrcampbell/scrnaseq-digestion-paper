@@ -7,11 +7,13 @@ output:
     toc_float: true
   html_notebook: default
 params:
-  input_csv: input.csv
+  de_csv: input.csv
+  pathway_csv: pathway.csv
   cellranger_version: v2
   pseudobulk: TRUE
   volcano_plot: volcano.png
   grid_plot: grid.png
+  pathway_plot: pathway.png
 ---
 
 
@@ -36,7 +38,7 @@ Load in data
 
 
 ```{r}
-df <- read_csv(params$input_csv)
+df <- read_csv(params$de_csv)
 ```
 
 # Volcano plots
@@ -96,5 +98,30 @@ coregene_df %>%
 
 ```{r}
 ggsave(params$grid_plot, width = 8, height = 5)
+```
+
+# Pathway analysis
+
+
+```{r}
+df_pt <- read_csv(params$pathway_csv)
+```
+
+```{r}
+filter(df_pt, FDR < 0.05) %>% 
+ggplot(aes(x = forcats::fct_reorder(gsub("HALLMARK_", "", pathway), -FDR), y = -log10(FDR))) +
+  geom_bar(aes(fill = Direction), stat = 'identity') +
+  coord_flip() +
+  scale_fill_manual(values = c("Up"=scales::muted('red'),
+                               "Down"=scales::muted('blue')), 
+                    name = "Regulation at 37C") +
+  cowplot::theme_cowplot(font_size = 11) +
+  labs(x = "Pathway", y = expression(-log[10]~"(FDR)"), subtitle = "Significant pathways") +
+  theme(legend.position = c(0.6, 0.1),
+        legend.box.background = element_rect(colour = 'black', size = .2))
+```
+
+```{r}
+ggsave(params$pathway_plot, width = 7, height = 7)
 ```
 

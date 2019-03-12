@@ -29,12 +29,17 @@ pt_figs = expand("../../figs/primary_tumour_temp_de/{fn}_{cv}_pseudobulk_{pb}.pn
                  cv = cellranger_versions,
                  pb = pseudobulk)
 
-pdx_cl_csvs = expand("../../data/pdx_cl_temp_de/{cv}/DE_results_pseudobulk_{pb}.csv",
+pdx_cl_de_csvs = expand("../../data/pdx_cl_temp_de/{cv}/DE_results_pseudobulk_{pb}.csv",
                              cv=cellranger_versions,
                              pb=pseudobulk)
 
+pdx_cl_pathway_csvs = expand("../../data/pdx_cl_temp_de/{cv}/pathway_results_pseudobulk_{pb}.csv",
+                             cv=cellranger_versions,
+                             pb=pseudobulk)
+
+
 pdx_cl_figs = expand("../../figs/pdx_cl_temp_de/{fn}_{cv}_pseudobulk_{pb}.png",
-                 fn = ['volcano','grid'],
+                 fn = ['volcano','grid','pathway'],
                  cv = cellranger_versions,
                  pb = pseudobulk)
 
@@ -43,7 +48,8 @@ rule all:
     input:
         primary_tumour_csvs,
         pt_figs,
-        pdx_cl_csvs,
+        pdx_cl_de_csvs,
+        pdx_cl_pathway_csvs,
         pdx_cl_figs
 
 
@@ -53,7 +59,8 @@ rule pdx_cl_de:
     input:
         sces_qc
     output:
-        csv="../../data/pdx_cl_temp_de/{cv}/DE_results_pseudobulk_{pb}.csv",
+        de_csv="../../data/pdx_cl_temp_de/{cv}/DE_results_pseudobulk_{pb}.csv",
+        pathway_csv="../../data/pdx_cl_temp_de/{cv}/pathway_results_pseudobulk_{pb}.csv",
         report="../../reports/pdx_cl_temp_de/pdx_cl_temp_de_{cv}_pseudobulk_{pb}.html"
     shell:
         "Rscript -e \"rmarkdown::render('pdx_cl_temp_de.Rmd', \
@@ -61,26 +68,31 @@ rule pdx_cl_de:
         knit_root_dir='{params.curr_dir}', \
         params=list(cellranger_version='{wildcards.cv}', \
         pseudobulk='{wildcards.pb}',\
-        output_csv='{output.csv}'))\" "    
+        de_csv='{output.de_csv}',\
+        pathway_csv='{output.pathway_csv}'))\" "    
 
 
 rule pdx_cl_figs:
     params:
         curr_dir=os.getcwd()
     input:
-        csv="../../data/pdx_cl_temp_de/{cv}/DE_results_pseudobulk_{pb}.csv"
+        de_csv="../../data/pdx_cl_temp_de/{cv}/DE_results_pseudobulk_{pb}.csv",
+        pathway_csv="../../data/pdx_cl_temp_de/{cv}/pathway_results_pseudobulk_{pb}.csv",
     output:
         volcano="../../figs/pdx_cl_temp_de/volcano_{cv}_pseudobulk_{pb}.png",
         grid="../../figs/pdx_cl_temp_de/grid_{cv}_pseudobulk_{pb}.png",
+        pathway="../../figs/pdx_cl_temp_de/pathway_{cv}_pseudobulk_{pb}.png",
         report="../../reports/pdx_cl_temp_de/collated_report_{cv}_pseudobulk_{pb}.html"
     shell:
         "Rscript -e \"rmarkdown::render('pdx_cl_results.Rmd', \
         output_file='{params.curr_dir}/{output.report}', \
         knit_root_dir='{params.curr_dir}', \
         params=list(cellranger_version='{wildcards.cv}', \
-        input_csv='{input.csv}',\
+        de_csv='{input.de_csv}',\
+        pathway_csv='{input.pathway_csv}',\
         volcano_plot='{output.volcano}',\
         grid_plot='{output.grid}',\
+        pathway_plot='{output.pathway}',\
         pseudobulk='{wildcards.pb}'))\" "    
 
 rule primary_tumour_de:
@@ -92,7 +104,7 @@ rule primary_tumour_de:
         csv="../../data/primary_tumour_temp_de/{cv}/DE_results_{ct}_pseudobulk_{pb}.csv",
         report="../../reports/primary_tumour_temp_de/primary_tumour_de_{cv}_{ct}_pseudobulk_{pb}.html"
     shell:
-        "Rscript -e \"rmarkdown::render('primary_tumour_temp_de_summed.Rmd', \
+        "Rscript -e \"rmarkdown::render('primary_tumour_temp_de.Rmd', \
         output_file='{params.curr_dir}/{output.report}', \
         knit_root_dir='{params.curr_dir}', \
         params=list(cellranger_version='{wildcards.cv}', \
