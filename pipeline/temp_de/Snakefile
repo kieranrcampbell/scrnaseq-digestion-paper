@@ -33,12 +33,18 @@ pdx_cl_csvs = expand("../../data/pdx_cl_temp_de/{cv}/DE_results_pseudobulk_{pb}.
                              cv=cellranger_versions,
                              pb=pseudobulk)
 
+pdx_cl_figs = expand("../../figs/pdx_cl_temp_de/{fn}_{cv}_pseudobulk_{pb}.png",
+                 fn = ['volcano','grid'],
+                 cv = cellranger_versions,
+                 pb = pseudobulk)
+
 
 rule all:
     input:
         primary_tumour_csvs,
         pt_figs,
-        pdx_cl_csvs
+        pdx_cl_csvs,
+        pdx_cl_figs
 
 
 rule pdx_cl_de:
@@ -57,6 +63,25 @@ rule pdx_cl_de:
         pseudobulk='{wildcards.pb}',\
         output_csv='{output.csv}'))\" "    
 
+
+rule pdx_cl_figs:
+    params:
+        curr_dir=os.getcwd()
+    input:
+        csv="../../data/pdx_cl_temp_de/{cv}/DE_results_pseudobulk_{pb}.csv"
+    output:
+        volcano="../../figs/pdx_cl_temp_de/volcano_{cv}_pseudobulk_{pb}.png",
+        grid="../../figs/pdx_cl_temp_de/grid_{cv}_pseudobulk_{pb}.png",
+        report="../../reports/pdx_cl_temp_de/collated_report_{cv}_pseudobulk_{pb}.html"
+    shell:
+        "Rscript -e \"rmarkdown::render('pdx_cl_results.Rmd', \
+        output_file='{params.curr_dir}/{output.report}', \
+        knit_root_dir='{params.curr_dir}', \
+        params=list(cellranger_version='{wildcards.cv}', \
+        input_csv='{input.csv}',\
+        volcano_plot='{output.volcano}',\
+        grid_plot='{output.grid}',\
+        pseudobulk='{wildcards.pb}'))\" "    
 
 rule primary_tumour_de:
     params:

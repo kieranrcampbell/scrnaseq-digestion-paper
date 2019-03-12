@@ -7,8 +7,8 @@ output:
     toc_float: true
   html_notebook: default
 params:
-  pseudobulk: FALSE
-  cellranger_version: v3
+  pseudobulk: TRUE
+  cellranger_version: v2
   output_csv: output.csv
 ---
 
@@ -76,6 +76,9 @@ sces <- lapply(sces, function(sce) {
   if(!(sce$digestion_temperature[1] %in% c(6, 37))) {
     return(NULL)
   }
+  if(sce$temp_de_comparison[1] == -1) { # Don't want this comparison in
+    return(NULL)
+  }
   sce
 })
 
@@ -141,7 +144,7 @@ tryCatch({
   #   
   
   if(!is.na(corfit$consensus.correlation)) {
-    fit <- lmFit(v, design, block = factor(patient_ids), correlation = corfit$consensus.correlation)
+    fit <- lmFit(v, design, block = factor(ids), correlation = corfit$consensus.correlation)
   } else {
     fit <- lmFit(v, design)
   }

@@ -1,0 +1,100 @@
+---
+title: "Primary tumour DE collate results"
+author: "Kieran R Campbell"
+output:
+  html_document: 
+    toc: true
+    toc_float: true
+  html_notebook: default
+params:
+  input_csv: input.csv
+  cellranger_version: v2
+  pseudobulk: TRUE
+  volcano_plot: volcano.png
+  grid_plot: grid.png
+---
+
+
+```{r}
+knitr::opts_chunk$set(echo = TRUE,
+                      cache = FALSE)
+
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(glue)
+  library(ggrepel)
+})
+
+select <- dplyr::select
+
+pseudobulk <- as.logical(params$pseudobulk)
+```
+
+
+Load in data
+
+
+
+```{r}
+df <- read_csv(params$input_csv)
+```
+
+# Volcano plots
+
+```{r}
+coregene_df <- filter(df, adj.P.Val < 0.05, abs(logFC) > log2(1.5))
+
+df <- mutate(df, is_coregene = ensembl_gene_id %in% coregene_df$ensembl_gene_id)
+```
+
+
+```{r}
+df_ann <- filter(df, adj.P.Val < 0.05) %>% 
+  top_n(20, abs(logFC))
+```
+
+
+```{r}
+ggplot(df, aes(x = logFC, y = -log10(adj.P.Val)))+
+  geom_point(aes(colour = is_coregene)) +
+  geom_hline(yintercept = -log10(0.05), colour = 'darkred', linetype = 2) +
+  # geom_vline(xintercept = -log2(1.5), colour = 'darkred', linetype = 2) +
+  # geom_vline(xintercept = log2(1.5), colour = 'darkred', linetype = 2) +
+  cowplot::theme_cowplot(font_size = 11) +
+  geom_text_repel(aes(label = gene_symbol), data = df_ann, size = 2) +
+  scale_colour_manual(values = c("TRUE"="black", "FALSE"="grey60"), guide = FALSE) +
+  labs(x = expression(log[2]~"(fold change)"), y = expression(-log[10]~"(q-value)"))
+```
+
+```{r}
+ggsave(params$volcano_plot, width = 7, height = 6)
+```
+
+
+
+# Core gene set plots
+
+```{r}
+
+symbol_na <- is.na(coregene_df$gene_symbol)
+
+coregene_df$gene_symbol[symbol_na] <- coregene_df$ensembl_gene_id[symbol_na]
+```
+
+
+```{r}
+coregene_df %>% 
+  top_n(min(40, nrow(coregene_df)), abs(logFC)) %>% 
+  ggplot(aes(x = forcats::fct_reorder(gene_symbol, logFC), y = logFC, fill = logFC)) +
+  geom_bar(stat = 'identity') +
+  scale_fill_gradient2(low = scales::muted("blue"), high = scales::muted("red"), guide = FALSE) +
+  cowplot::theme_cowplot(font_size = 11) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+      legend.position = "top") +
+  labs(x = "Gene", y = expression(log[2]~"(fold change)"))
+```
+
+```{r}
+ggsave(params$grid_plot, width = 8, height = 5)
+```
+
