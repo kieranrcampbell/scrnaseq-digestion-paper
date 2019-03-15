@@ -1,0 +1,10 @@
+
+cell_types:
+- bcell
+- cancercell
+- endothelial
+- monocyte
+- myofibroblast
+- plasmacell
+- tcell
+- vascular_smc

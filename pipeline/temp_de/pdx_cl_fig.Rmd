@@ -1,0 +1,86 @@
+---
+title: "PDX and cell line temperature figure"
+author: "Kieran R Campbell"
+output:
+  html_document: 
+    toc: true
+    toc_float: true
+  html_notebook: default
+params:
+  umap_csv: "../../figs/pdx_cl_temp_de/umap-pdx-cl.csv"
+  coregeneset_path: "../../figs/pdx_cl_temp_de/grid_v3_pseudobulk_FALSE.rds"
+  pathway_path: "../../figs/pdx_cl_temp_de/pathway_v3_pseudobulk_FALSE.rds"
+  fig_png: "../../figs/final/pdx_cl_temp_de_fig.png"
+  fig_rds: "../../figs/final/pdx_cl_temp_de_fig.rds"
+---
+
+```{r}
+library(tidyverse)
+```
+
+```{r}
+df_umap <- read_csv(params$umap_csv)
+```
+
+
+
+
+
+```{r}
+cols = c("6"="#2166ac", "37"="#b2182b")
+
+temp_plot <- ggplot(df_umap, aes(x = UMAP1, y = UMAP2)) +
+  geom_point(aes(colour = factor(digestion_temperature)), alpha = 0.3, size = 1) +
+  scale_colour_manual(values = cols, name = "Digestion\ntemperature") +
+  cowplot::theme_cowplot(font_size = 10) +
+  theme(legend.position = "right")
+
+
+plot_gene <- function(gene, cutoff = 2) {
+  g <- df_umap[[gene]]
+  df_umap[[gene]][g > cutoff] <- cutoff
+  
+  df_umap[[gene]] <- df_umap[[gene]] / cutoff
+  
+  ggplot(df_umap, aes(x = UMAP1, y = UMAP2)) +
+    geom_point(aes_string(colour = gene), alpha = 0.3, size = 1) +
+    viridis::scale_colour_viridis(name = gene) +
+    cowplot::theme_cowplot(font_size = 10) +
+    theme(legend.position = "right")
+}
+```
+
+```{r fig.height = 10, fig.width = 4}
+umap_grid <- cowplot::plot_grid(
+  temp_plot,
+  plot_gene("FOS"),
+  plot_gene("JUNB"),
+  plot_gene("NR4A1"),
+  ncol = 1,
+  align = 'v'
+)
+```
+
+```{r}
+coregeneset <- readRDS(params$coregeneset_path)
+pathway <- readRDS(params$pathway_path)
+```
+
+Overall plot:
+
+```{r}
+pdx_cl_plot <- cowplot::plot_grid(
+  coregeneset,
+  umap_grid,
+  pathway,
+  nrow = 1,
+  labels = "AUTO",
+  rel_widths = c(1,.8,1.6)
+)
+
+ggsave(params$fig_png, width = 13, height = 8)
+
+saveRDS(last_plot(), params$fig_rds)
+```
+
+

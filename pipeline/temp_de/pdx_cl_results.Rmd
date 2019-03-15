@@ -7,10 +7,9 @@ output:
     toc_float: true
   html_notebook: default
 params:
-  de_csv: input.csv
-  pathway_csv: pathway.csv
-  cellranger_version: v2
-  pseudobulk: TRUE
+  input_rds: input.rds
+  cellranger_version: v3
+  pseudobulk: FALSE
   volcano_plot: volcano.png
   grid_plot: grid.png
   pathway_plot: pathway.png
@@ -25,6 +24,7 @@ suppressPackageStartupMessages({
   library(tidyverse)
   library(glue)
   library(ggrepel)
+  library(org.Hs.eg.db)
 })
 
 select <- dplyr::select
@@ -38,38 +38,57 @@ Load in data
 
 
 ```{r}
-df <- read_csv(params$de_csv)
+results <- readRDS(params$input_rds)
+
+df <- results$edger_results
+
+df_pt <- results$camera_results
 ```
+
+# Data summaries
+
+Number of cells: `r nrow(results$design)`
+
 
 # Volcano plots
 
 ```{r}
-coregene_df <- filter(df, adj.P.Val < 0.05, abs(logFC) > log2(1.5))
+coregene_df <- filter(df, FDR< 0.05, abs(logFC) > log2(1.5))
 
 df <- mutate(df, is_coregene = ensembl_gene_id %in% coregene_df$ensembl_gene_id)
+
+```
+
+In total this gives `r nrow(coregene_df)` genes
+
+Up - down regulation:
+
+```{r}
+table(sign(coregene_df$logFC))
 ```
 
 
+
+
+
 ```{r}
-df_ann <- filter(df, adj.P.Val < 0.05) %>% 
+df_ann <- coregene_df %>% 
   top_n(20, abs(logFC))
 ```
 
 
 ```{r}
-ggplot(df, aes(x = logFC, y = -log10(adj.P.Val)))+
+ggplot(df, aes(x = logFC, y = -log10(FDR))) +
   geom_point(aes(colour = is_coregene)) +
   geom_hline(yintercept = -log10(0.05), colour = 'darkred', linetype = 2) +
-  # geom_vline(xintercept = -log2(1.5), colour = 'darkred', linetype = 2) +
-  # geom_vline(xintercept = log2(1.5), colour = 'darkred', linetype = 2) +
   cowplot::theme_cowplot(font_size = 11) +
-  geom_text_repel(aes(label = gene_symbol), data = df_ann, size = 2) +
+  geom_label_repel(aes(label = gene_symbol), data = df_ann) +
   scale_colour_manual(values = c("TRUE"="black", "FALSE"="grey60"), guide = FALSE) +
-  labs(x = expression(log[2]~"(fold change)"), y = expression(-log[10]~"(q-value)"))
+  labs(x = expression(log[2]~"(fold change) 37C vs 6C"), y = expression(-log[10]~"(q-value)")) 
 ```
 
 ```{r}
-ggsave(params$volcano_plot, width = 7, height = 6)
+saveRDS(last_plot(), params$volcano_plot)
 ```
 
 
@@ -93,19 +112,18 @@ coregene_df %>%
   cowplot::theme_cowplot(font_size = 11) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
       legend.position = "top") +
-  labs(x = "Gene", y = expression(log[2]~"(fold change)"))
+  labs(x = "Gene", y = expression(log[2]~"(fold change) 37C vs 6C")) +
+  # geom_hline(yintercept = log2(1.5), colour = 'grey50', linetype = 1, size = 1) +
+  coord_flip()
 ```
 
 ```{r}
-ggsave(params$grid_plot, width = 8, height = 5)
+saveRDS(last_plot(), params$grid_plot)
 ```
 
 # Pathway analysis
 
 
-```{r}
-df_pt <- read_csv(params$pathway_csv)
-```
 
 ```{r}
 filter(df_pt, FDR < 0.05) %>% 
@@ -121,7 +139,63 @@ ggplot(aes(x = forcats::fct_reorder(gsub("HALLMARK_", "", pathway), -FDR), y = -
         legend.box.background = element_rect(colour = 'black', size = .2))
 ```
 
+
+
+Let's read in the original pathways
+
+
 ```{r}
-ggsave(params$pathway_plot, width = 7, height = 7)
+load("../../data/genesets/human_H_v5p2.rdata")
+go_gs <- Hs.H
+
+entrezgene_symbol_map <- as.list(org.Hs.egSYMBOL)
+
+
+map_ids <- function(entrezgenes) {
+  x <- unlist(entrezgene_symbol_map[entrezgenes])
+  names(x) <- NULL
+  x
+}
+```
+
+```{r}
+go_gs_symbol <- lapply(go_gs, map_ids)
+
+core_genes <- coregene_df$gene_symbol
+
+n_core_genes <- lapply(go_gs_symbol, function(symbols) sum(core_genes %in% symbols))
+
+n_df <- tibble(pathway = names(n_core_genes), 
+               pathway_size = sapply(go_gs_symbol, length),
+               n_genes = unlist(n_core_genes),
+               pct_pathway_genes = n_genes / pathway_size * 100)
+```
+
+```{r}
+print(n_df)
+```
+
+
+```{r}
+filter(df_pt, FDR < 0.05) %>% 
+  inner_join(n_df) %>% 
+  mutate(pathway = forcats::fct_reorder(gsub("HALLMARK_", "", pathway), -FDR)) %>% 
+  ggplot(aes(x = pathway, y = -log10(FDR))) +
+  geom_segment(aes(y = 0, yend = -log10(FDR), x = pathway, xend = pathway), linetype = 2, colour = 'grey50') +
+  geom_point(aes(size = pct_pathway_genes, fill = Direction), shape = 21) +
+  coord_flip() +
+  scale_fill_manual(values = c("Up"=scales::muted('red'),
+                               "Down"=scales::muted('blue')), 
+                    name = "Regulation at 37C") +
+  scale_size(name = "% pathway genes\nin core geneset") +
+  cowplot::theme_cowplot(font_size = 11) +
+  labs(x = "Pathway", y = expression(-log[10]~"(FDR)"), subtitle = "Significant pathways") +
+  theme(legend.position = c(0.5, 0.4),
+        legend.box.background = element_rect(colour = 'black', size = .2))
+
+```
+
+```{r}
+saveRDS(last_plot(), params$pathway_plot)
 ```
 

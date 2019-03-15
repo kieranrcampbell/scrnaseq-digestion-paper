@@ -1,0 +1,167 @@
+---
+title: "PDX and cell line temperature DE"
+author: "Kieran R Campbell"
+output:
+  html_document: 
+    toc: true
+    toc_float: true
+  html_notebook: default
+params:
+  pseudobulk: FALSE
+  cellranger_version: v3
+  fig_rds: fig.rds
+  umap_csv: umap.csv
+---
+
+UMAP representation of heat genes
+
+```{r}
+pseudobulk <- as.logical(params$pseudobulk)
+print(params)
+```
+
+
+
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE,
+                      cache = FALSE)
+
+suppressPackageStartupMessages({
+  library(scater)
+  library(SingleCellExperiment)
+  library(tidyverse)
+  library(glue)
+  library(edgeR)
+  library(limma)
+  library(ggrepel)
+  library(org.Hs.eg.db)
+  library(fgsea)
+})
+
+filter <- dplyr::filter
+mutate <- dplyr::mutate
+arrange <- dplyr::arrange
+```
+
+```{r}
+entrezgene_ensembl_map <- as.list(org.Hs.egENSEMBL)
+
+map_ids <- function(entrezgenes) {
+  x <- unlist(entrezgene_ensembl_map[entrezgenes])
+  names(x) <- NULL
+  x
+}
+
+get_summed_counts <- function(sce) {
+  rowSums(as.matrix(counts(sce)))
+}
+```
+
+
+Read in data
+
+```{r}
+all_sce_files <- dir(glue("../../data/scesets/{params$cellranger_version}/"),
+                     pattern = "qc", full.names = TRUE)
+
+sces <- lapply(all_sce_files, readRDS)
+```
+
+Now we want to remove any fresh patient samples
+
+```{r}
+sces <- lapply(sces, function(sce) {
+  if(sce$sample_type[1] == "patient") {
+    return(NULL)
+  }
+  if(!(sce$digestion_temperature[1] %in% c(6, 37))) {
+    return(NULL)
+  }
+  if(sce$temp_de_comparison[1] == -1) { # Don't want this comparison in
+    return(NULL)
+  }
+  sce
+})
+
+sces[sapply(sces, is.null)] <- NULL
+```
+
+
+
+Collapse counts to temperature and patient specific
+
+
+```{r}
+
+if(pseudobulk) {
+
+ knitr::knit_exit()
+} else {
+  sces <- lapply(sces, function(sce) {
+    rowData(sce)[,-c(1:2)] <- NULL
+    reducedDims(sce) <- list()
+    sce
+  })
+  
+  sce <- do.call("cbind", sces)
+}
+```
+
+
+
+```{r}
+# sce <- sce[, sample(ncol(sce), 1000)]
+
+set.seed(123L)
+sce <- runUMAP(sce)
+```
+
+
+
+```{r}
+df_umap <- tibble(UMAP1 = reducedDims(sce)[['UMAP']][,1],
+                  UMAP2 = reducedDims(sce)[['UMAP']][,2],
+                  digestion_temperature = sce$digestion_temperature,
+                  FOS = logcounts(sce)['ENSG00000170345',],
+                  NR4A1 = logcounts(sce)['ENSG00000123358',],
+                  JUNB = logcounts(sce)['ENSG00000171223',])
+```
+
+
+```{r}
+cols = c("6"="#2166ac", "37"="#b2182b")
+
+temp_plot <- ggplot(df_umap, aes(x = UMAP1, y = UMAP2)) +
+  geom_point(aes(colour = factor(digestion_temperature)), alpha = 0.5) +
+  scale_colour_manual(values = cols, name = "Digestion\ntemperature") +
+  cowplot::theme_cowplot(font_size = 10) +
+  theme(legend.position = "right")
+
+
+plot_gene <- function(gene) {
+  ggplot(df_umap, aes(x = UMAP1, y = UMAP2)) +
+    geom_point(aes_string(colour = gene), alpha = 0.5) +
+    viridis::scale_colour_viridis(name = gene) +
+    cowplot::theme_cowplot(font_size = 10) +
+    theme(legend.position = "right")
+}
+```
+
+```{r fig.height = 10, fig.width = 4}
+cowplot::plot_grid(
+  temp_plot,
+  plot_gene("FOS"),
+  plot_gene("JUNB"),
+  plot_gene("NR4A1"),
+  ncol = 1,
+  align = 'v'
+)
+```
+
+
+```{r}
+saveRDS(last_plot(), params$fig_rds)
+
+write_csv(df_umap, params$umap_csv)
+```
+
