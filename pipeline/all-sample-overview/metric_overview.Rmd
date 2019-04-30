@@ -7,7 +7,7 @@ output:
     toc_float: true
   html_notebook: default
 params:
-  cellranger_version: v2
+  cellranger_version: v3
   input_umap_rds: input.rds
   output_figure: output.png
   pct_mito_fig: mito_fig.png
@@ -53,7 +53,7 @@ source(here("scripts/utils.R"))
 Let's grab the list of all the raw scesets:
 
 ```{r}
-all_raw <- dir(glue("../../data/scesets/{params$cellranger_version}"), pattern = "raw", full.names = TRUE)
+all_raw <- dir(here(glue("data/scesets/{params$cellranger_version}")), pattern = "raw", full.names = TRUE)
 ```
 
 Now get the pct mito from these as well as sample names
