@@ -27,6 +27,8 @@ rule umap:
         --output_rds {output.rds} "
 
 rule overview:
+    params:
+        curr_dir = os.getcwd()
     input:
         sces_qc,
         umap_fig="figs/all-sample-overview/umap_all_{cv}.rds"
@@ -36,7 +38,8 @@ rule overview:
         report="reports/all-sample-overview/all_sample_overview-{cv}.html"
     shell:
         "Rscript -e \"rmarkdown::render('pipeline/all-sample-overview/metric_overview.Rmd',\
-        output_file='{output.report}', \
+        output_file='{params.curr_dir}/{output.report}', \
+        knit_root_dir='{params.curr_dir}',\
         params=list(cellranger_version='{wildcards.cv}', \
         input_umap_rds='{input.umap_fig}', \
         output_figure='{output.figure}', \

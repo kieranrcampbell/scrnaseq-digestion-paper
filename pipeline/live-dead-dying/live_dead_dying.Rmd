@@ -6,6 +6,9 @@ output:
     toc: true
     toc_float: true
   html_notebook: default
+params:
+  cellranger_version: v3
+  output_rds: 'output.rds'
 ---
 
 ```{r setup, include=FALSE}
@@ -23,6 +26,7 @@ suppressPackageStartupMessages({
   library(tidyverse)
   library(ggrepel)
   library(org.Hs.eg.db)
+  library(glue)
 })
 ```
 
@@ -30,7 +34,7 @@ suppressPackageStartupMessages({
 Read in the data:
 
 ```{r}
-sce_files <- dir("../../data/scesets/", full.names = TRUE, pattern = "SA928")
+sce_files <- dir(glue("../../data/scesets/{params$cellranger_version}/"), full.names = TRUE, pattern = "SA928")
 
 sce_files <- sce_files[grepl("raw", sce_files)]
 
@@ -38,10 +42,9 @@ sces <- lapply(sce_files, readRDS)
 
 sces <- lapply(sces, function(sce) {
   rowData(sce)[,-c(1:2)] <- NULL
+  colData(sce)$GSC_BRC <- NULL
   sce
 })
-
-sces[[1]]$GSC_BRC <- NULL
 
 sce <- do.call("cbind", sces)
 ```
@@ -92,7 +95,7 @@ col_data <- dplyr::mutate(col_data,
 
 col_data %>% 
   ggplot(aes(x = total_features_by_counts, y = pct_counts_mito, fill = cell_status)) +
-  geom_point(data = select(col_data, -cell_status), colour = 'grey80', fill = 'black') +
+  geom_point(data = dplyr::select(col_data, -cell_status), colour = 'grey80', fill = 'black') +
   geom_point(alpha = 0.8, size = 2, shape = 21, colour = 'grey30') +
   cowplot::theme_cowplot() +
   facet_wrap(~ cell_status) +
@@ -103,17 +106,26 @@ col_data %>%
   geom_rug()
 ```
 
-```{r}
+```{r, fig.width = 4, fig.height = 4}
+cols <- c(
+  "Live"="#7bccc4",
+  "Dying"="#43a2ca",
+  "Dead"="#0868ac"
+)
+
 col_data %>% 
   ggplot(aes(x = cell_status, y = pct_counts_mito, fill = cell_status)) +
-  geom_boxplot() +
+  geom_boxplot(outlier.size = 1) +
   cowplot::theme_cowplot() +
   theme(legend.position = "none",
         strip.background = element_rect(fill = 'white')) +
-  labs(x = "# genes detected", y = "% counts mitochondrial") +
-  scale_fill_brewer(palette = "Accent")
+  labs(x = "Cell status", y = "% counts mitochondrial") +
+  scale_fill_manual(values = cols)
 ```
 
+```{r}
+mito_boxplot <- last_plot()
+```
 
 
 Run PCA first:
@@ -122,17 +134,28 @@ Run PCA first:
 sce <- runPCA(sce, ncomponents = 3)
 ```
 
-PCA plots:
+PCA plot for paper
 
 ```{r}
-plotPCA(sce, colour_by = "cell_status")
-plotPCA(sce, colour_by = "total_features_by_counts")
+df_pca <- as_tibble(reducedDims(sce)[['PCA']][,1:2]) %>% 
+  mutate(cell_status = stringr::str_to_title(sce$cell_status))
 
-plotPCA(sce, colour_by = "pct_counts_mito", ncomponents = 3)
-plotPCA(sce, colour_by = "pct_counts_ribo")
-
-plotPCA(sce, colour_by = "doublet_score")
+ggplot(df_pca, aes(x = PC1, y = PC2)) +
+  cowplot::theme_cowplot(font_size = 11) +
+  geom_point(data = dplyr::select(df_pca, -cell_status), colour = 'grey80') +
+  geom_point(aes(colour = cell_status), alpha = 0.8) +
+  facet_wrap(~ cell_status) +
+  scale_colour_manual(values = cols, name = "Cell status") +
+  theme(legend.position = "top", 
+        strip.background = element_rect(fill = 'white'),
+        strip.text = element_text(face = 'bold'))
 ```
+
+```{r}
+pca_plot <- last_plot()
+```
+
+
 
 # Differential expression
 
@@ -174,120 +197,99 @@ sce_de <- sce_de[!grepl("^MT", rowData(sce_de)$Symbol),]
 sce_de <- sce_de[!grepl("^RP[L|S]", rowData(sce_de)$Symbol),]
 ```
 
+Subsample while playing with figures:
 
 ```{r}
-dge <- DGEList(counts(sce_de))
+# sce_dd <- sce_de[, sce_de$cell_status %in% c("dead", "dying")]
+# sce_live <- sce_de[, sce_de$cell_status == "live"]
+# sce_live <- sce_live[, sample(ncol(sce_live), ncol(sce_dd))]
+# 
+# sce_de <- cbind(sce_dd, sce_live)
+```
+
+
+
+```{r}
+col_data <- col_data[match(sce_de$Barcode, col_data$Barcode),]
+
+count_mat_filtered <- as.matrix(counts(sce_de))
+
+dge <- DGEList(count_mat_filtered) # , group = factor(ids))
 dge <- calcNormFactors(dge)
 
-col_data$detection_rate <- scale(col_data$total_features_by_counts)[,1]
-
-design <- model.matrix(~ detection_rate + ct, col_data) # Your design matrix here
-
-v <- voom(dge, design, plot = TRUE)
+col_data$cdr <- scale(colMeans(count_mat_filtered > 0))[,1]
+design <- model.matrix(~ cdr + ct, data = col_data)
+  
+dge <- estimateDisp(dge, design = design)
 ```
 
+Fit the model:
+
 ```{r}
-fit <- lmFit(v, design)
-fit <- eBayes(fit)
-res <- decideTests(fit)
-
-tt3 <- topTable(fit, 
-               coef = 3,
-               sort.by = "none",
-               number = nrow(sce_de),
-               confint = TRUE)
-
-tt4 <- topTable(fit, 
-               coef = 4,
-               sort.by = "none",
-               number = nrow(sce_de),
-               confint = TRUE)
-
-df_deadlow <- as.data.frame(tt3) %>% 
-  rownames_to_column('ensembl_gene_id') %>% 
-  as_tibble() %>% 
-  dplyr::mutate(gene_symbol = rowData(sce_de)$Symbol) %>% 
-  dplyr::select(ensembl_gene_id, gene_symbol, everything()) %>% 
-  dplyr::mutate(is_significant = adj.P.Val < 0.05,
-                se = (CI.R - CI.L) / 3.92)
-
-
-df_live_dying <- as.data.frame(tt4) %>% 
-  rownames_to_column('ensembl_gene_id') %>% 
-  as_tibble() %>% 
-  dplyr::mutate(gene_symbol = rowData(sce_de)$Symbol) %>% 
-  dplyr::select(ensembl_gene_id, gene_symbol, everything()) %>% 
-  dplyr::mutate(is_significant = adj.P.Val < 0.05,
-                se = (CI.R - CI.L) / 3.92)
-
+fit <- glmQLFit(dge, design = design)
 ```
 
-And fit a contrast for the two low mito pops:
+
+Significance testing for all contrasts
 
 ```{r}
-contrast <- makeContrasts(ctdead_low - ctlive_dying, levels = design)
+qlf_dead_low_vs_dead_high <- glmQLFTest(fit, coef = 3)
+qlf_live_dying_vs_dead_high <- glmQLFTest(fit, coef = 4)
+qlf_live_dying_vs_dead_low <- glmQLFTest(fit, contrast = c(0, 0, -1, 1))
 
-cfit <- contrasts.fit(fit, contrast)
-cfit <- eBayes(cfit)
-#res <- decideTests(cfit)
-
-tt4 <- topTable(cfit, 
-               coef = 1,
-               sort.by = "none",
-               number = nrow(sce_de),
-               confint = TRUE)
-
-df_c <- as.data.frame(tt4) %>% 
-  rownames_to_column('ensembl_gene_id') %>% 
-  as_tibble() %>% 
-  dplyr::mutate(gene_symbol = rowData(sce_de)$Symbol) %>% 
-  dplyr::select(ensembl_gene_id, gene_symbol, everything()) %>% 
-  dplyr::mutate(is_significant = adj.P.Val < 0.05,
-                se = (CI.R - CI.L) / 3.92)
+tt1 <- topTags(qlf_dead_low_vs_dead_high, n = Inf)
+tt2 <- topTags(qlf_live_dying_vs_dead_high, n = Inf)
+tt3 <- topTags(qlf_live_dying_vs_dead_low, n = Inf)
 ```
 
 
 ```{r}
-plot_volcano <- function(df_limma, title) {
-  sig_cols <- c("FALSE" = "grey80", "TRUE" = "darkred")
-  theme_set(theme_bw(base_size = 11))
-  
-  df_text1 <- top_n(df_limma, 25, logFC)
-  df_text2 <- top_n(df_limma, 25, desc(logFC))
-  
-  df_text <- bind_rows(df_text1, df_text2)
-  
-  ggplot(df_limma, aes(x = logFC, y = -log10(adj.P.Val), color = is_significant)) +
-    geom_point(alpha = 0.7) +
-    scale_color_manual(values = sig_cols, name = "Significantly differentially expressed") +
-    geom_text_repel(data = df_text, aes(label = gene_symbol), color = 'black', size = 3) +
-    labs(x = paste("logFC", title),
-         y = expression(-log[10]~"(q-value)")) +
-    theme(legend.position = "bottom",
-          legend.box.background = element_rect(linetype = 1, size = 1)) 
-  
+
+tidy_tt <- function(tt, str) {
+  tt <- as.data.frame(tt) %>% 
+  rownames_to_column("ensembl_gene_id") %>% 
+  as_tibble() %>% 
+    mutate(comparison = str)
+
+  tt <- mutate(tt, gene_symbol = mapIds(org.Hs.eg.db,
+                                 keys=tt$ensembl_gene_id,
+                                 column="SYMBOL",
+                                 keytype="ENSEMBL",
+                                 multiVals="first")
+  )
+  tt
 }
 ```
 
+
+
 ```{r}
-capts <- c(
-  "Dead low % mito vs dead high % mito",
-  "Live & dying vs dead high % mito",
-  "Dead low % mito vs live & dying"
+tt_all <- bind_rows(
+  tidy_tt(tt1, "Dead low % mito vs dead high % mito"),
+  tidy_tt(tt2, "Live & dying vs dead high % mito"),
+  tidy_tt(tt3, "Live & dying vs dead low % mito")
 )
-
-plt1 <- plot_volcano(df_deadlow, capts[1])
-plt2 <- plot_volcano(df_live_dying, capts[2])
-plt3 <- plot_volcano(df_c, capts[3])
 ```
 
 
 
 ```{r}
-full_plot <- cowplot::plot_grid(plt1, plt2, plt3, nrow = 1, labels = "auto")
-
-ggsave("../../figs/live_dead_dying/volcanoes.png", full_plot, width = 14, height = 5)
+tt_annot <- group_by(tt_all, comparison) %>% 
+  top_n(30, (abs(logFC))) %>% 
+  ungroup()
 ```
+
+```{r}
+ggplot(tt_all, aes(x = logFC, y = -log10(FDR))) +
+  geom_point() +
+  geom_text_repel(data = tt_annot, aes(label = gene_symbol)) +
+  facet_wrap(~ comparison)
+```
+
+
+
+
+
 
 # Gene set enrichment
 
@@ -313,14 +315,18 @@ names(go_gs_ensembl) <- sub("GO_", "", names(go_gs_ensembl))
 idx <- ids2indices(go_gs_ensembl, id = rownames(fit))
 
 
-cam1 <- camera(v, idx, design, contrast = 3, trend.var = TRUE)
-cam2 <- camera(v, idx, design, contrast = 4, trend.var = TRUE)
-cam3 <- camera(v, idx, design, contrast = c(0, 0, 1, -1), trend.var = TRUE)
+cam1 <- camera(dge, idx, design, contrast = 3, trend.var = TRUE)
+cam2 <- camera(dge, idx, design, contrast = 4, trend.var = TRUE)
+cam3 <- camera(dge, idx, design, contrast = c(0, 0, -1, 1), trend.var = TRUE)
 ```
 
 Add in data and plot:
 
 ```{r}
+capts <- c("Dead low % mito vs dead high % mito",
+          "Live & dying vs dead high % mito",
+          "Live & dying vs dead low % mito")
+
 f <- function(x, s) {
   rownames_to_column(x, "pathway") %>% 
     mutate(comparison = s)
@@ -338,7 +344,7 @@ Textual annotation
 
 ```{r}
 df_txt <- group_by(df_camera, factor(comparison)) %>% 
-  top_n(10, desc(FDR))
+  top_n(10, dplyr::desc(FDR))
 ```
 
 
@@ -364,23 +370,29 @@ ggplot(df_txt, aes(x = pathway, y = -log10(FDR))) +
   facet_wrap(~ comparison, scales = "free_x") +
   coord_flip() +
   theme_bw(base_size = 10) +
-  scale_colour_manual(values = c("Down"=scales::muted('red'), "Up"=scales::muted('blue'))) +
+  scale_colour_manual(values = c("Down"=scales::muted('green'), "Up"=scales::muted('orange'))) +
   theme(legend.position = "top",
-        strip.background = element_rect(fill = "white"))
+        strip.background = element_rect(fill = "white")) +
+  labs(x = "Pathway")
 
-ggsave("../../figs/live_dead_dying/pathway_enrichment.png", width = 11, height = 4)
+
 ```
+
+```{r}
+enrich_plot <- last_plot()
+```
+
 
 Sanity check:
 
 ```{r}
-resp_chain <- go_gs_ensembl$RESPIRATORY_CHAIN
+results <- list(
+  mito_boxplot = mito_boxplot,
+  pca_plot = pca_plot,
+  enrich_plot = enrich_plot
+)
 
-sce_de$ct <- col_data$ct
-
-resp_chain <- resp_chain[ resp_chain %in% rownames(sce_de) ]
-
-plotExpression(sce_de, x = "ct", features = resp_chain[21:40])
+saveRDS(results, params$output_rds)
 ```
 
 

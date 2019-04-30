@@ -74,13 +74,13 @@ And read:
 ```{r}
 coldata_all <- map_df(all_raw, read_and_get_coldata)
 
-filter(col_data_all, enzyme_mix != "MACS_mix")
+filter(coldata_all, enzyme_mix != "MACS_mix")
 ```
 
 Total count:
 
 ```{r}
-print(dim(col_data_all))
+print(dim(coldata_all))
 ```
 
 
@@ -206,10 +206,7 @@ cowplot::plot_grid(grid_plot, ridge_plot,
 ```
 
 ```{r}
-
-saveRDS(list('grid_plot'=grid_plot, 'ridge_plot'=ridge_plot), "../../figs/all_sample_analyses/rds_for_allen.rds")
-
-source("fix_plot_allen.R")
+source("scripts/fix_plot_allen.R")
 
 umap_plot <- readRDS(params$input_umap_rds)
 

@@ -14,6 +14,9 @@ figs = expand(base_figure_path + "{f}.{e}",
               f=figures,
               e=extensions)
 
+figs = expand("../../figs/live_dead_dying/ldd_{cv}.rds",
+              cv=cellranger_versions)
+
 
 rule all:
     input:
@@ -25,18 +28,12 @@ rule make_figs:
     params:
         curr_dir = os.getcwd()
     output:
-        pct_mito_png=base_figure_path + "pct_mito.png",
-        pct_mito_rds=base_figure_path + "pct_mito.rds",
-        pathway_enrichment_png=base_figure_path + "pathway_enrichment.png",
-        pathway_enrichment_rds=base_figure_path + "pathway_enrichment.rds",
+        rds="../../figs/live_dead_dying/ldd_{cv}.rds",
         report="../../reports/live_dying_dead/{cv}_live_dying_dead.html"
     shell:
         "Rscript -e \"rmarkdown::render('{params.curr_dir}/live_dead_dying.Rmd', \
         output_file='{params.curr_dir}/{output.report}', \
         knit_root_dir='{params.curr_dir}', \
         params=list(cellranger_version='{wildcards.cv}', \
-        pct_mito_png='{output.pct_mito_png}', \
-        pct_mito_rds='{output.pct_mito_rds}', \
-        pathway_enrichment_png='{output.pathway_enrichment_png}', \
-        pathway_enrichment_rds='{output.pathway_enrichment_rds}'))\" "
+        output_rds='{output.rds}'))\" "
 
