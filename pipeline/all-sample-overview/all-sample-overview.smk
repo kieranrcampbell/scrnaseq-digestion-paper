@@ -15,7 +15,8 @@ pct_mito_fig = expand("figs/all-sample-overview/pct_counts_mito_all_samples-{cv}
 
 rule umap:
     input:
-        sces_qc
+        sces_qc,
+        config['murine_contamination_csv']
     output:
         rds="figs/all-sample-overview/umap_all_{cv}.rds",
         png="figs/all-sample-overview/umap_all_{cv}.png"
