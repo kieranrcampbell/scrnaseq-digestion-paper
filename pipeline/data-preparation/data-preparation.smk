@@ -1,20 +1,3 @@
-import pandas as pd
-import os
-import json
-
-
-configfile: "private_config.yaml"
-
-df_inventory = pd.read_csv(config['sample_inventory_url']).dropna()
-
-assert df_inventory.shape[0] == 45
-
-df_inventory.index = df_inventory['id']
-inventory_dict = df_inventory.to_dict('index')
-
-ids = list(inventory_dict.keys())
-
-cellranger_versions = ['v3']
 
 # SingleCellExperiments
 sces_raw = expand("data/scesets/{cv}/{id}_sceset_{cv}_raw.rds",
@@ -51,8 +34,9 @@ rule qc_scesets:
         sce="data/scesets/{cv}/{id}_sceset_{cv}_qc.rds",
         report="reports/qc/{cv}/qc_report_{id}_{cv}.html"
     shell:
-        "Rscript -e \"rmarkdown::render('pipeline/qc/sce_qc.Rmd', \
-        output_file='{params.curr_dir}/{output.report}', knit_root_dir='{params.curr_dir}', \
+        "Rscript -e \"rmarkdown::render('pipeline/data-preparation/sce_qc.Rmd', \
+        output_file='{params.curr_dir}/{output.report}',  \
+        knit_root_dir='{params.curr_dir}', \
         params=list(input_sce_path='{input}', output_sce_path='{output.sce}'))\" "
 
 rule mito_de:
