@@ -48,7 +48,7 @@ remove_hg19 <- function(sce) {
 make_umap_plot <- function(cellranger_version = "v3",
                            output_png = "output.png",
                            output_rds = "output.rds") {
-  all_qcd <- dir(glue("../../data/scesets/{cellranger_version}"), full.names = TRUE, pattern = "qc")
+  all_qcd <- dir(here(glue("data/scesets/{cellranger_version}")), full.names = TRUE, pattern = "qc")
   
   
   sces <- lapply(all_qcd, read_sce_and_strip)
@@ -76,7 +76,14 @@ make_umap_plot <- function(cellranger_version = "v3",
   
   sce <- remove_mouse_cells(sce)
   
-  rvs <- rowVars(as.matrix(logcounts(sce)))
+  # rvs <- rowVars(as.matrix(logcounts(sce)))
+  # this can brick the system as using too much memory, so we do it a super dumb way
+  N <- seq_len(nrow(sce) )
+    
+  splits <- split(N, ceiling(seq_along(N)/500))
+  
+  rvs <- sapply(splits, function(s) rowVars(as.matrix(logcounts(sce[s,]))))
+  rvs <- unlist(rvs)
   
   highvar <- rvs > sort(rvs, decreasing = T)[2001]
   highvar[is.na(highvar)] <- FALSE
@@ -85,8 +92,6 @@ make_umap_plot <- function(cellranger_version = "v3",
   
   set.seed(2453L)
   um <- umap(lc)
-  
-  plot(um)
   
   um_df <- as_data_frame(um) %>% 
     dplyr::mutate(sample_type = colData(sce)$sample_type,
