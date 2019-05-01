@@ -28,16 +28,18 @@ include: 'pipeline/murine-contamination/murine-contamination.smk'
 
 include: 'pipeline/all-sample-overview/all-sample-overview.smk'
 
+include: 'pipeline/live-dead-dying/live-dead-dying.smk'
+
+include: 'pipeline/comparison-existing-10X/comparison-existing-10X.smk'
+
 # TODO: includes for
 # 1. All differential expression
-# 2. live dead dying
-# 3. Comparison to 10X
 
-
-
+print(all_figs)
 
 rule all:
     input:
         sces_qc, # QC'd SingleCellExperiments
         config['murine_contamination_csv'],
-        list(itertools.chain(*all_figs.values()))
+        list(itertools.chain(*all_figs.values())),
+        list(itertools.chain(*deliverables.values()))
