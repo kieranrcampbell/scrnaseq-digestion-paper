@@ -16,11 +16,12 @@ ids = list(inventory_dict.keys())
 
 cellranger_versions = config['cellranger_versions']
 
+# all_figs and deliverables are added to by subsequent workflows
 # Dict of images to populate for final output:
 all_figs = {}
 
 # Dictionary of deliverables (e.g. differential expression results, genesets, etc)
-deliverables = {}
+deliverables = {'murine-contamination': config['murine_contamination_csv']}
 
 include: 'pipeline/data-preparation/data-preparation.smk'
 
@@ -40,6 +41,5 @@ print(all_figs)
 rule all:
     input:
         sces_qc, # QC'd SingleCellExperiments
-        config['murine_contamination_csv'],
         list(itertools.chain(*all_figs.values())),
         list(itertools.chain(*deliverables.values()))
