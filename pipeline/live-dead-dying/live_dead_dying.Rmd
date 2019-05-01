@@ -53,6 +53,14 @@ sce <- do.call("cbind", sces)
 print(sce)
 ```
 
+Print number of cells in each condition:
+
+```{r}
+print(table(sce$cell_status))
+```
+
+
+
 
 Add relevant info:
 
@@ -389,7 +397,8 @@ Sanity check:
 results <- list(
   mito_boxplot = mito_boxplot,
   pca_plot = pca_plot,
-  enrich_plot = enrich_plot
+  enrich_plot = enrich_plot,
+  edger_results = tt_all
 )
 
 saveRDS(results, params$output_rds)
