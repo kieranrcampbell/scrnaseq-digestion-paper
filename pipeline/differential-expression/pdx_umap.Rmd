@@ -36,6 +36,7 @@ suppressPackageStartupMessages({
   library(ggrepel)
   library(org.Hs.eg.db)
   library(fgsea)
+  library(here)
 })
 
 filter <- dplyr::filter
@@ -61,7 +62,7 @@ get_summed_counts <- function(sce) {
 Read in data
 
 ```{r}
-all_sce_files <- dir(glue("../../data/scesets/{params$cellranger_version}/"),
+all_sce_files <- dir(here(glue("data/scesets/{params$cellranger_version}/")),
                      pattern = "qc", full.names = TRUE)
 
 sces <- lapply(all_sce_files, readRDS)
@@ -78,6 +79,9 @@ sces <- lapply(sces, function(sce) {
     return(NULL)
   }
   if(sce$temp_de_comparison[1] == -1) { # Don't want this comparison in
+    return(NULL)
+  }
+  if(!(sce$enzyme_mix[1] %in% c("collagenase", "cold_protease"))) {
     return(NULL)
   }
   sce
@@ -125,15 +129,23 @@ df_umap <- tibble(UMAP1 = reducedDims(sce)[['UMAP']][,1],
                   FOS = logcounts(sce)['ENSG00000170345',],
                   NR4A1 = logcounts(sce)['ENSG00000123358',],
                   JUNB = logcounts(sce)['ENSG00000171223',])
+
+df_umap <- mutate(
+  df_umap,
+  digestion_method = case_when(
+    digestion_temperature == 37 ~ "Collagenase 37C",
+    digestion_temperature == 6 ~ "Cold protease 6C"
+  )
+)
 ```
 
 
 ```{r}
-cols = c("6"="#2166ac", "37"="#b2182b")
+cols = c("Cold protease 6C"="#2166ac", "Collagenase 37C"="#b2182b")
 
 temp_plot <- ggplot(df_umap, aes(x = UMAP1, y = UMAP2)) +
-  geom_point(aes(colour = factor(digestion_temperature)), alpha = 0.5) +
-  scale_colour_manual(values = cols, name = "Digestion\ntemperature") +
+  geom_point(aes(colour = factor(digestion_method)), alpha = 0.5) +
+  scale_colour_manual(values = cols, name = "Digestion\nmethod") +
   cowplot::theme_cowplot(font_size = 10) +
   theme(legend.position = "right")
 

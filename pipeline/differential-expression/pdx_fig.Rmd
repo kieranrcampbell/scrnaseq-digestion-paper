@@ -27,11 +27,11 @@ df_umap <- read_csv(params$umap_csv)
 
 
 ```{r}
-cols = c("6"="#2166ac", "37"="#b2182b")
+cols = c("Cold protease 6C"="#2166ac", "Collagenase 37C"="#b2182b")
 
 temp_plot <- ggplot(df_umap, aes(x = UMAP1, y = UMAP2)) +
-  geom_point(aes(colour = factor(digestion_temperature)), alpha = 0.3, size = 1) +
-  scale_colour_manual(values = cols, name = "Digestion\ntemperature") +
+  geom_point(aes(colour = factor(digestion_method)), alpha = 0.5) +
+  scale_colour_manual(values = cols, name = "Digestion\nmethod") +
   cowplot::theme_cowplot(font_size = 10) +
   theme(legend.position = "right")
 
@@ -75,7 +75,7 @@ pdx_cl_plot <- cowplot::plot_grid(
   pathway,
   nrow = 1,
   labels = "AUTO",
-  rel_widths = c(1,.8,1.6)
+  rel_widths = c(1,1,1.6)
 )
 
 ggsave(params$fig_png, width = 13, height = 8)

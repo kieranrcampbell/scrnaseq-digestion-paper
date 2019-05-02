@@ -21,7 +21,7 @@ cellranger_versions = config['cellranger_versions']
 all_figs = {}
 
 # Dictionary of deliverables (e.g. differential expression results, genesets, etc)
-deliverables = {'murine-contamination': config['murine_contamination_csv']}
+deliverables = {'murine-contamination': [config['murine_contamination_csv']]}
 
 include: 'pipeline/data-preparation/data-preparation.smk'
 
@@ -33,10 +33,8 @@ include: 'pipeline/live-dead-dying/live-dead-dying.smk'
 
 include: 'pipeline/comparison-existing-10X/comparison-existing-10X.smk'
 
-# TODO: includes for
-# 1. All differential expression
+include: 'pipeline/differential-expression/differential-expression.smk'
 
-print(all_figs)
 
 rule all:
     input:

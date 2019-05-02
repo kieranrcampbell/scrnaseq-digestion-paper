@@ -25,6 +25,7 @@ suppressPackageStartupMessages({
   library(glue)
   library(ggrepel)
   library(org.Hs.eg.db)
+  library(here)
 })
 
 select <- dplyr::select
@@ -49,8 +50,13 @@ df_pt <- results$camera_results
 
 Number of cells: `r nrow(results$design)`
 
+Total genes significant at 5% FDR:
 
-# Volcano plots
+```{r}
+table(df$FDR < 0.05)
+```
+
+
 
 ```{r}
 coregene_df <- filter(df, FDR< 0.05, abs(logFC) > log2(1.5))
@@ -67,7 +73,7 @@ Up - down regulation:
 table(sign(coregene_df$logFC))
 ```
 
-
+# Volcano plots
 
 
 
@@ -145,7 +151,7 @@ Let's read in the original pathways
 
 
 ```{r}
-load("../../data/genesets/human_H_v5p2.rdata")
+load(here("data/genesets/human_H_v5p2.rdata"))
 go_gs <- Hs.H
 
 entrezgene_symbol_map <- as.list(org.Hs.egSYMBOL)

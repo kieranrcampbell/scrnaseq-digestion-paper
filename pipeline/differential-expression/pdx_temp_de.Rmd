@@ -1,5 +1,5 @@
 ---
-title: "PDX and cell line temperature DE"
+title: "PDX and cell line digestion method DE"
 author: "Kieran R Campbell"
 output:
   html_document: 
@@ -7,8 +7,8 @@ output:
     toc_float: true
   html_notebook: default
 params:
-  pseudobulk: TRUE
-  cellranger_version: v2
+  pseudobulk: FALSE
+  cellranger_version: v3
   output_rds: output.rds
 ---
 
@@ -35,11 +35,14 @@ suppressPackageStartupMessages({
   library(ggrepel)
   library(org.Hs.eg.db)
   library(fgsea)
+  library(here)
 })
 
 filter <- dplyr::filter
 mutate <- dplyr::mutate
 arrange <- dplyr::arrange
+
+source(here("scripts/utils.R"))
 ```
 
 ```{r}
@@ -61,7 +64,7 @@ get_summed_counts <- function(sce) {
 Read in data
 
 ```{r}
-all_sce_files <- dir(glue("../../data/scesets/{params$cellranger_version}/"),
+all_sce_files <- dir(here(glue("data/scesets/{params$cellranger_version}/")),
                      pattern = "qc", full.names = TRUE)
 
 sces <- lapply(all_sce_files, readRDS)
@@ -80,6 +83,10 @@ sces <- lapply(sces, function(sce) {
   if(sce$temp_de_comparison[1] == -1) { # Don't want this comparison in
     return(NULL)
   }
+  if(!(sce$enzyme_mix[1] %in% c("collagenase", "cold_protease"))) {
+    return(NULL)
+  }
+  
   sce
 })
 
@@ -92,6 +99,8 @@ Collapse counts to temperature and patient specific
 
 
 ```{r}
+
+sce <- NULL
 
 if(pseudobulk) {
 
@@ -114,6 +123,23 @@ if(pseudobulk) {
   digestion_temperatures <- sce$digestion_temperature
 }
 ```
+
+Remove mouse cells:
+
+```{r}
+sce <- remove_mouse_cells(sce)
+```
+
+
+```{r}
+print(sce)
+```
+
+```{r}
+table(sce$digestion_temperature)
+```
+
+
 
 
 # Differential expression - edgeR-QTL
@@ -175,7 +201,7 @@ tt$pseudobulk <- pseudobulk
 
 
 ```{r}
-load("../../data/genesets/human_H_v5p2.rdata")
+load(here("data/genesets/human_H_v5p2.rdata"))
 go_gs <- Hs.H
 
 entrezgene_ensembl_map <- as.list(org.Hs.egENSEMBL)
