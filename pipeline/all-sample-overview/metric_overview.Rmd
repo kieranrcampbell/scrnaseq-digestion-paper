@@ -11,6 +11,7 @@ params:
   input_umap_rds: input.rds
   output_figure: output.png
   pct_mito_fig: mito_fig.png
+  stats_file: output.csv
 ---
 
 ```{r setup, include=FALSE}
@@ -74,7 +75,7 @@ And read:
 ```{r}
 coldata_all <- map_df(all_raw, read_and_get_coldata)
 
-filter(coldata_all, enzyme_mix != "MACS_mix")
+coldata_all <- filter(coldata_all, enzyme_mix != "MACS_mix")
 ```
 
 Total count:
@@ -229,7 +230,12 @@ Final stats:
 ```{r}
 ncells <- print(nrow(coldata_all))
 
-print(glue::glue("We profiled {ncells} cells"))
+df_stat <- frame_data(
+  ~ description, ~ statistic,
+  "total_cells", nrow(coldata_all)
+)
+
+write_statistics(df_stat, file = params$stats_file)
 ```
 
 

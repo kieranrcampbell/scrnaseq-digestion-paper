@@ -35,7 +35,8 @@ rule overview:
     output:
         figure="figs/all-sample-overview/all_sample_overview-{cv}.png",
         pct_mito_fig="figs/all-sample-overview/pct_counts_mito_all_samples-{cv}.png",
-        report="reports/all-sample-overview/all_sample_overview-{cv}.html"
+        report="reports/all-sample-overview/all_sample_overview-{cv}.html",
+        stats="data/statistics/all_cells_{cv}.csv"
     shell:
         "Rscript -e \"rmarkdown::render('pipeline/all-sample-overview/metric_overview.Rmd',\
         output_file='{params.curr_dir}/{output.report}', \
@@ -43,4 +44,5 @@ rule overview:
         params=list(cellranger_version='{wildcards.cv}', \
         input_umap_rds='{input.umap_fig}', \
         output_figure='{output.figure}', \
+        stats_file='{output.stats}', \
         pct_mito_fig='{output.pct_mito_fig}'))\" "

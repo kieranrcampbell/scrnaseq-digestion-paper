@@ -74,6 +74,8 @@ make_umap_plot <- function(cellranger_version = "v3",
   
   sce <- do.call("cbind", sces_filt)
   
+  sce <- sce[, sce$enzyme_mix != "MACS_mix"]
+  
   sce <- remove_mouse_cells(sce)
   
   # rvs <- rowVars(as.matrix(logcounts(sce)))
