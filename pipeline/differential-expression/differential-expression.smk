@@ -106,7 +106,19 @@ rule pdx_generate_final_figures:
         pathway_path='{input.pathway}', \
         fig_png='{output.png}', \
         fig_rds='{output.rds}'))\" "
-    
+
+rule pdx_stats:
+    params:
+        curr_dir=os.getcwd()
+    input:
+        rds="data/pdx_temp_de/{cv}/DE_results_pseudobulk_{pb}.rds"
+    output:
+        "data/statistics/pdx_differential_expression_{pb}_{cv}.csv"
+    shell:
+        "Rscript pipeline/differential-expression/pdx-differential-expression-stats.R \
+        --input_rds {input.rds} \
+        --output_csv {output}"
+
 
 rule primary_tumour_de:
     params:
