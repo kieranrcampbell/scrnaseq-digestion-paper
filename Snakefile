@@ -23,6 +23,11 @@ all_figs = {}
 # Dictionary of deliverables (e.g. differential expression results, genesets, etc)
 deliverables = {'murine-contamination': [config['murine_contamination_csv']]}
 
+# Statistics
+statistics = {s: 'data/statistics/{}.csv'.format(s) for s in config['statistics']}
+
+
+
 include: 'pipeline/data-preparation/data-preparation.smk'
 
 include: 'pipeline/murine-contamination/murine-contamination.smk'
@@ -40,4 +45,16 @@ rule all:
     input:
         sces_qc, # QC'd SingleCellExperiments
         list(itertools.chain(*all_figs.values())),
-        list(itertools.chain(*deliverables.values()))
+        list(itertools.chain(*deliverables.values())),
+	list(statistics.values())
+
+
+rule collate_stats:
+    input:
+        list(statistics.values())
+    output:
+        config['statfile']
+    shell:
+        "Rscript scripts/create-latex-stats.R \
+        --input_dir data/statistics \
+        --output_latex {output}"
