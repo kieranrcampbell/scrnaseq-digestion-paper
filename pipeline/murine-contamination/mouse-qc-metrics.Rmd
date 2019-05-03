@@ -1,0 +1,141 @@
+---
+title: "Identify mouse cells across samples"
+author: "Kieran R Campbell"
+output:
+  html_document
+params:
+  pseudobulk: FALSE
+  cellranger_version: v3
+  mouse_qc_fig: mouse.png
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      cache = FALSE)
+
+suppressPackageStartupMessages({
+  library(scater)
+  library(DropletUtils)
+  library(SingleCellExperiment)
+  library(dplyr)
+  library(tidyverse)
+  library(glue)
+  library(here)
+  library(ggridges)
+})
+
+filter <- dplyr::filter
+mutate <- dplyr::mutate
+
+source(here("scripts/utils.R"))
+```
+
+
+
+Read in data
+
+```{r}
+all_sce_files <- dir(here(glue("data/scesets/{params$cellranger_version}/")),
+                     pattern = "raw", full.names = TRUE)
+
+sces <- lapply(all_sce_files, readRDS)
+```
+
+Now we want to remove any fresh patient samples
+
+```{r}
+sces <- lapply(sces, function(sce) {
+  if(sce$sample_type[1] != "PDX") {
+    return(NULL)[1]
+  }
+  if(!(sce$digestion_temperature[1] %in% c(6, 37))) {
+    return(NULL)
+  }
+  if(sce$temp_de_comparison[1] == -1) { # Don't want this comparison in
+    return(NULL)
+  }
+  if(!(sce$enzyme_mix[1] %in% c("collagenase", "cold_protease"))) {
+    return(NULL)
+  }
+  
+  sce
+})
+
+sces[sapply(sces, is.null)] <- NULL
+```
+
+
+
+Collapse counts to temperature and patient specific
+
+
+```{r}
+
+sces <- lapply(sces, function(sce) {
+  rowData(sce)[,-c(1:2)] <- NULL
+  reducedDims(sce) <- list()
+  sce
+})
+
+sce <- do.call("cbind", sces)
+```
+
+Remove mouse cells:
+
+```{r}
+sce_nomouse <- remove_mouse_cells(sce)
+```
+
+
+```{r}
+sce$is_human <- sce$Barcode %in% sce_nomouse$Barcode
+```
+
+
+```{r}
+df_metrics <- as.data.frame(colData(sce)) %>% 
+  dplyr::select(id, is_human, pct_counts_mito, total_features_by_counts, total_counts) %>% 
+  gather(metric, value, -id, -is_human)
+
+df_metrics$metric <- gsub("_", " ", df_metrics$metric)
+df_metrics$metric <- stringr::str_to_title(df_metrics$metric)
+
+df_metrics <- df_metrics %>% 
+  mutate(`Cell type` = case_when(
+    is_human ~ "Human",
+    !is_human ~ "Mouse"
+  ))
+
+ df_metrics %>% 
+  ggplot(aes(x = id, fill = `Cell type`, y = value)) +
+  geom_boxplot(outlier.size = .1, size = 0.2) +
+  facet_wrap(~ metric, scales = "free_y") +
+  theme_bw() +
+  labs(x = "Sample ID") +
+  theme(legend.position = "top") +
+   scale_fill_brewer(palette = "Set2", name = "Cell type") +
+   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 6),
+         axis.title.y = element_blank())
+  
+```
+
+```{r}
+ggsave(params$mouse_qc_fig, width = 10, height = 5)
+```
+
+
+Write statistics to file
+
+```{r}
+stats <- frame_data(
+  ~ description, ~statistic,
+  "total_pdx_cells", ncol(sce),
+  "total_pdx_human_cells", ncol(sce_nomouse),
+  "total_pdx_mouse_cells", ncol(sce) - ncol(sce_nomouse)
+)
+
+write_statistics(stats, "murine_cell_count")
+```
+
+
+
