@@ -14,6 +14,7 @@ write_stats <- function(input_dir = "data/statistics",
   
   stats_tex <- sapply(seq_len(nrow(all_stats)), function(i) {
     d <- all_stats[i,]
+    d$description <- gsub("_", "", d$description)
     glue(template)
   })
   

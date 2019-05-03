@@ -7,6 +7,7 @@ suppressPackageStartupMessages({
   library(yaml)
 })
 
+
 #' Identifies mouse cells using previous analysis
 remove_mouse_cells <- function(sce) {
   
@@ -24,4 +25,23 @@ remove_mouse_cells <- function(sce) {
   stopifnot(all.equal(col_data$Barcode, sce$Barcode))
   
   sce[, !col_data$is_mouse]
+}
+
+#' Write statistics
+write_statistics <- function(df_stats,
+                             stat_name = NULL,
+                             base_path = here("data/statistics"),
+                             file = NULL) {
+  
+  if(is.null(stat_name) && is.null(file)) {
+    stop("One of stat_name or file must be provided")
+  }
+  
+  if(!is.null(file)) {
+    output_file <- file
+  } else {
+    output_file <- file.path(base_path, paste0(stat_name, ".csv"))
+  }
+  stopifnot(all.equal(names(df_stats), c("description", "statistic")))
+  write_csv(df_stats, output_file)
 }

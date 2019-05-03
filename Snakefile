@@ -46,7 +46,8 @@ rule all:
         sces_qc, # QC'd SingleCellExperiments
         list(itertools.chain(*all_figs.values())),
         list(itertools.chain(*deliverables.values())),
-	list(statistics.values())
+	list(statistics.values()),
+	config['statfile']
 
 
 rule collate_stats:
