@@ -27,6 +27,7 @@ suppressPackageStartupMessages({
   library(ggrepel)
   library(org.Hs.eg.db)
   library(glue)
+  library(here)
 })
 ```
 
@@ -34,7 +35,7 @@ suppressPackageStartupMessages({
 Read in the data:
 
 ```{r}
-sce_files <- dir(glue("../../data/scesets/{params$cellranger_version}/"), full.names = TRUE, pattern = "SA928")
+sce_files <- dir(glue(here("data/scesets/{params$cellranger_version}/")), full.names = TRUE, pattern = "SA928")
 
 sce_files <- sce_files[grepl("raw", sce_files)]
 
@@ -304,7 +305,7 @@ ggplot(tt_all, aes(x = logFC, y = -log10(FDR))) +
 
 
 ```{r}
-load("../../data/genesets/human_c5_v5p2.rdata")
+load(here("data/genesets/human_c5_v5p2.rdata"))
 go_gs <- Hs.c5
 
 entrezgene_ensembl_map <- as.list(org.Hs.egENSEMBL)

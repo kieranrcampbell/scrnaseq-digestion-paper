@@ -3,7 +3,7 @@
 library(tidyverse)
 library(aargh)
 
-ldd_collate <- function(results = "figs/live_dead_dying/ldd_v3.rds",
+ldd_collate <- function(results = "figs/live-dead-dying/ldd_v3.rds",
                         output_png = "output.png",
                         output_csv = "output.csv") {
 
@@ -24,7 +24,7 @@ ldd_collate <- function(results = "figs/live_dead_dying/ldd_v3.rds",
   results$pca_plot$layers[[2]]$aes_params$alpha <- 0.4
   
   results$pca_plot <- results$pca_plot +
-    theme(legend.position = 'bottom') +
+    theme(legend.position = 'right') +
     consistent_theme()
   
   results$mito_boxplot <- results$mito_boxplot + consistent_theme()
@@ -38,10 +38,11 @@ ldd_collate <- function(results = "figs/live_dead_dying/ldd_v3.rds",
                        labels = "AUTO"),
     results$enrich_plot,
     ncol = 1,
+    rel_heights = c(1,1.2),
     labels = c("", "D")
   )
   
-  ggsave(output_png, width = 12, height = 6)
+  ggsave(output_png, width = 12, height = 5.5)
   
   write_csv(results$edger_results, output_csv)
   

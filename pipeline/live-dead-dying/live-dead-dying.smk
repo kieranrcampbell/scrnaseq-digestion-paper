@@ -10,10 +10,10 @@ rule live_dead_dying analysis:
     params:
         curr_dir = os.getcwd()
     output:
-        rds="figs/live_dead_dying/ldd_{cv}.rds",
+        rds="figs/live-dead-dying/ldd_{cv}.rds",
         report="reports/live_dying_dead/{cv}_live_dying_dead.html"
     shell:
-        "Rscript -e \"rmarkdown::render('{params.curr_dir}/pipeline/live-dead-dying/live_dead_dying.Rmd', \
+        "Rscript -e \"rmarkdown::render('{params.curr_dir}/pipeline/live-dead-dying/live-dead-dying.Rmd', \
         output_file='{params.curr_dir}/{output.report}', \
         knit_root_dir='{params.curr_dir}', \
         params=list(cellranger_version='{wildcards.cv}', \
@@ -21,12 +21,12 @@ rule live_dead_dying analysis:
 
 rule collate_analysis:
     input:
-        "figs/live_dead_dying/ldd_{cv}.rds",
+        "figs/live-dead-dying/ldd_{cv}.rds",
     output:
         png="figs/live-dead-dying/ldd_{cv}.png",
-        csv="data/deliverables/live_dead_dying_de-{cv}.csv"
+        csv="data/deliverables/live-dead-dying_de-{cv}.csv"
     shell:
-        "Rscript pipeline/live-dead-dying/live_dead_dying-collate-for-paper.R \
+        "Rscript pipeline/live-dead-dying/live-dead-dying-collate-for-paper.R \
         --results {input} \
         --output_png {output.png} \
         --output_csv {output.csv}"
