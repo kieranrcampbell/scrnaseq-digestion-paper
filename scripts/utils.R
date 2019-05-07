@@ -45,3 +45,7 @@ write_statistics <- function(df_stats,
   stopifnot(all.equal(names(df_stats), c("description", "statistic")))
   write_csv(df_stats, output_file)
 }
+
+get_config <- function(config_file = 'private_config.yaml') {
+  read_yaml(here('private_config.yaml'))
+}
