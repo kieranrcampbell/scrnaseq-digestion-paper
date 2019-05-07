@@ -30,6 +30,9 @@ final_fig_pdx = {
 
 all_figs['pdx-differential-expression'] = [final_fig_pdx['png']]
 
+all_figs['primary-tumour-de'] = expand("figs/differential-expression/primary_tumour_temp_de_{cv}_{pb}.png",
+                                       cv=cellranger_versions,
+                                       pb=pseudobulk)
 
 rule pdx_de:
     params:
@@ -63,7 +66,7 @@ rule pdx_umap:
         umap_csv='{output.umap_csv}'))\" "    
     
 
-rule pdx_figs:
+rule pdx_results:
     params:
         curr_dir=os.getcwd()
     input:
@@ -72,13 +75,15 @@ rule pdx_figs:
         volcano="figs/pdx_temp_de/volcano_{cv}_pseudobulk_{pb}.rds",
         grid="figs/pdx_temp_de/grid_{cv}_pseudobulk_{pb}.rds",
         pathway="figs/pdx_temp_de/pathway_{cv}_pseudobulk_{pb}.rds",
-        report="reports/pdx_temp_de/collated_report_{cv}_pseudobulk_{pb}.html"
+        report="reports/pdx_temp_de/collated_report_{cv}_pseudobulk_{pb}.html",
+        stats="data/statistics/coregeneset_{pb}_{cv}.csv"
     shell:
         "Rscript -e \"rmarkdown::render('pipeline/differential-expression/pdx_results.Rmd', \
         output_file='{params.curr_dir}/{output.report}', \
         knit_root_dir='{params.curr_dir}', \
         params=list(cellranger_version='{wildcards.cv}', \
         input_rds='{input.rds}',\
+        coregene_stats='{output.stats}',\
         volcano_plot='{output.volcano}',\
         grid_plot='{output.grid}',\
         pathway_plot='{output.pathway}',\
@@ -124,12 +129,12 @@ rule primary_tumour_de:
     params:
         curr_dir=os.getcwd()
     input:
-        sce="data/primary_tumour_analysis/v3/sce_final_annotated/{cv}.rds"
+        sce="data/primary_tumour_analysis/v5/sce_final_annotated/{cv}.rds"
     output:
         rds="data/primary_tumour_temp_de/{cv}/DE_results_{ct}_pseudobulk_{pb}.rds",
         report="reports/primary_tumour_temp_de/primary_tumour_de_{cv}_{ct}_pseudobulk_{pb}.html"
     shell:
-        "Rscript -e \"rmarkdown::render('primary_tumour_temp_de.Rmd', \
+        "Rscript -e \"rmarkdown::render('pipeline/differential-expression/primary_tumour_temp_de.Rmd', \
         output_file='{params.curr_dir}/{output.report}', \
         knit_root_dir='{params.curr_dir}', \
         params=list(cellranger_version='{wildcards.cv}', \
@@ -147,17 +152,19 @@ rule primary_tumour_figs:
         pdx_results="data/pdx_temp_de/{cv}/DE_results_pseudobulk_{pb}.rds",
 
     output:
-        volcano="figs/primary_tumour_temp_de/volcano_{cv}_pseudobulk_{pb}.png",
-        grid="figs/primary_tumour_temp_de/grid_{cv}_pseudobulk_{pb}.png",
-        pathway="figs/primary_tumour_temp_de/pathway_{cv}_pseudobulk_{pb}.png",
-        report="reports/primary_tumour_temp_de/collated_report_{cv}_pseudobulk_{pb}.html"
+        volcano="figs/primary-tumour-temp-de/volcano_{cv}_pseudobulk_{pb}.png",
+        grid="figs/primary-tumour-temp-de/grid_{cv}_pseudobulk_{pb}.png",
+        pathway="figs/primary-tumour-temp-de/pathway_{cv}_pseudobulk_{pb}.png",
+        report="reports/primary-tumour-temp-de/collated_report_{cv}_pseudobulk_{pb}.html",
+        fig="figs/differential-expression/primary_tumour_temp_de_{cv}_{pb}.png"
     shell:
-        "Rscript -e \"rmarkdown::render('primary_tumour_results.Rmd', \
+        "Rscript -e \"rmarkdown::render('pipeline/differential-expression/primary_tumour_results.Rmd', \
         output_file='{params.curr_dir}/{output.report}', \
         knit_root_dir='{params.curr_dir}', \
         params=list(cellranger_version='{wildcards.cv}', \
         volcano_plot='{output.volcano}',\
         grid_plot='{output.grid}',\
         pathway_plot='{output.pathway}',\
+        output_fig='{output.fig}',\
         pdx_results='{input.pdx_results}',\
         pseudobulk='{wildcards.pb}'))\" "    

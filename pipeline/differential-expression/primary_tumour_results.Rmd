@@ -9,10 +9,11 @@ output:
 params:
   cellranger_version: v3
   pseudobulk: FALSE
-  pdx_cl_de_csv: de.csv
+  pdx_results: "../../data/pdx_temp_de/v3/DE_results_pseudobulk_FALSE.rds"
   volcano_plot: volcano.png
   grid_plot: grid.png
-  pathway_plot: pathway.png
+  pathway_plot: "figs/deleteme.png"
+  output_fig: "figs/deleteme.png"
 ---
 
 
@@ -24,6 +25,7 @@ suppressPackageStartupMessages({
   library(tidyverse)
   library(glue)
   library(ggrepel)
+  library(here)
 })
 
 select <- dplyr::select
@@ -33,34 +35,35 @@ select <- dplyr::select
 Load in data
 
 ```{r}
-de_csv_files <- dir(glue("../../data/primary_tumour_temp_de/{params$cellranger_version}"),
-                 full.names = TRUE, pattern = paste0("DE.*.", as.character(params$pseudobulk)))
+results_files <- dir(here(glue("data/primary_tumour_temp_de/{params$cellranger_version}")),
+                 full.names = TRUE, pattern = paste0(as.character(params$pseudobulk), "*.rds"))
 
-pathway_csv_files <- dir(glue("../../data/primary_tumour_temp_de/{params$cellranger_version}"),
-                 full.names = TRUE, pattern = paste0("pathway.*.", as.character(params$pseudobulk)))
+results <- lapply(results_files, readRDS)
 ```
 
 ```{r}
-df <- map_dfr(de_csv_files, read_csv)
+df <- lapply(results, `[[`, 'edger_results') %>% 
+  bind_rows()
 ```
 
 
 ```{r}
-de_pdx_cl <- read_csv(params$pdx_cl_de_csv)
+pdx_results <- readRDS(params$pdx_results)
+df_pdx <- pdx_results$edger_results
 ```
 
 
 # Volcano plots
 
 ```{r}
-df_ann <- filter(df, adj.P.Val < 0.05) %>% 
+df_ann <- filter(df, FDR < 0.05) %>% 
   group_by(cell_type) %>% 
-  top_n(20, 1/adj.P.Val)
+  top_n(20, 1/FDR)
 ```
 
 
 ```{r}
-ggplot(df, aes(x = logFC, y = -log10(adj.P.Val)))+
+ggplot(df, aes(x = logFC, y = -log10(FDR)))+
   geom_point() +
   facet_wrap(~ cell_type, scales = "free", nrow = 2) +
   geom_hline(yintercept = -log10(0.05), colour = 'darkred', linetype = 2) +
@@ -79,7 +82,7 @@ ggsave(params$volcano_plot, width = 15, height = 6)
 Construct core gene set
 
 ```{r}
-coregene_df <- filter(de_pdx_cl, adj.P.Val < 0.05, logFC > log2(1.5))
+coregene_df <- filter(df_pdx, FDR < 0.05, logFC > log2(1.5))
 ```
 
 Let's take the top 40 genes
@@ -92,7 +95,15 @@ coregenes <- top_n(coregene_df, 40, abs(logFC)) %>% .$ensembl_gene_id
 
 ```{r}
 df_cg <- filter(df, ensembl_gene_id %in% coregenes) %>% 
-  mutate(significant = adj.P.Val < 0.05)
+  mutate(significant = FDR < 0.05)
+
+df_cg <- mutate(df_cg,
+                cell_type = case_when(
+                  cell_type == "Epithelial cells" ~ "Ovarian epithelial",
+                  cell_type == "Breast cancer cells" ~ "Breast epithelial",
+                  cell_type == "Monocyte_Macrophage" ~ "Monocyte/Macrophage",
+                  TRUE ~ cell_type
+                ))
 
 ggplot(df_cg, aes(y = cell_type, x = forcats::fct_reorder(gene_symbol, -logFC), size = logFC)) +
   geom_point(aes(fill = logFC, colour = significant), shape = 21) +
@@ -104,8 +115,13 @@ ggplot(df_cg, aes(y = cell_type, x = forcats::fct_reorder(gene_symbol, -logFC), 
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
         legend.position = "bottom") +
   scale_size(guide = FALSE) +
-  labs(x = "Digestion temperature associated gene", y = "Cell type")
+  labs(x = "Digestion method associated gene", y = "Cell type")
 ```
+
+```{r}
+de_grid <- last_plot()
+```
+
 
 ```{r}
 ggsave(params$grid_plot, width = 9, height = 4.5)
@@ -114,8 +130,20 @@ ggsave(params$grid_plot, width = 9, height = 4.5)
 # Pathway plot
 
 ```{r}
-dfp <- map_dfr(pathway_csv_files, read_csv)
+dfp <- lapply(results, `[[`, 'camera_results') %>% 
+  bind_rows()
 ```
+
+```{r}
+dfp <- mutate(dfp,
+                cell_type = case_when(
+                  cell_type == "Epithelial cells" ~ "Ovarian epithelial",
+                  cell_type == "Breast cancer cells" ~ "Breast epithelial",
+                  cell_type == "Monocyte_Macrophage" ~ "Monocyte/Macrophage",
+                  TRUE ~ cell_type
+                ))
+```
+
 
 ```{r}
 dfp$pathway <- gsub("HALLMARK_", "", dfp$pathway)
@@ -123,19 +151,46 @@ dfp$pathway <- forcats::fct_reorder(dfp$pathway, -log10(dfp$FDR))
 ```
 
 
+
 ```{r}
-ggplot(dfp, aes(x = cell_type, y = pathway)) +
+retained_pathways <- group_by(dfp, pathway) %>% 
+  summarise(min_fdr = min(FDR)) %>% 
+  dplyr::filter(min_fdr < 0.05) %>% 
+  .$pathway %>% 
+  droplevels()
+```
+
+
+
+```{r, fig.height=9, fig.width=7}
+filter(dfp, pathway %in% retained_pathways) %>% 
+  ggplot(aes(x = cell_type, y = pathway)) +
   geom_point(aes(size = -log10(FDR), colour = Direction, alpha = significant)) +
   scale_alpha_manual(values = c("TRUE"=.8, "FALSE"=0), guide = FALSE) +
     theme_bw() +
   theme(legend.text = element_text(colour = 'black')) +
   labs(x = "Cell type", y = "Pathway") +
   scale_colour_manual(values = c("Up"=scales::muted("red"),"Down"=scales::muted("blue"))) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text.y = element_text(size = 6))
   
 ```
 
 ```{r}
+pathway_plot <- last_plot()
+```
+
+
+```{r}
 ggsave(params$pathway_plot, width = 7, height = 10)
+```
+
+Final figure:
+
+```{r}
+cowplot::plot_grid(de_grid, pathway_plot, nrow = 1, labels = 'AUTO',
+                   rel_widths = c(1.3, 1))
+
+ggsave(params$output_fig, width = 14, height = 5)
 ```
 

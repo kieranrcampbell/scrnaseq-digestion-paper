@@ -13,6 +13,7 @@ params:
   volcano_plot: volcano.png
   grid_plot: grid.png
   pathway_plot: pathway.png
+  coregene_stats: coregene.stats
 ---
 
 
@@ -31,6 +32,8 @@ suppressPackageStartupMessages({
 select <- dplyr::select
 
 pseudobulk <- as.logical(params$pseudobulk)
+
+source(here("scripts/utils.R"))
 ```
 
 
@@ -48,18 +51,28 @@ df_pt <- results$camera_results
 
 # Data summaries
 
+Get the config we need:
+
+```{r}
+config <- get_config()
+
+alpha <- config$global_significance
+core_thresh <- config$core_geneset_fc
+```
+
+
 Number of cells: `r nrow(results$design)`
 
 Total genes significant at 5% FDR:
 
 ```{r}
-table(df$FDR < 0.05)
+table(df$FDR < alpha)
 ```
 
 
 
 ```{r}
-coregene_df <- filter(df, FDR< 0.05, abs(logFC) > log2(1.5))
+coregene_df <- filter(df, FDR< alpha, abs(logFC) > log2(core_thresh))
 
 df <- mutate(df, is_coregene = ensembl_gene_id %in% coregene_df$ensembl_gene_id)
 
@@ -86,7 +99,7 @@ df_ann <- coregene_df %>%
 ```{r}
 ggplot(df, aes(x = logFC, y = -log10(FDR))) +
   geom_point(aes(colour = is_coregene)) +
-  geom_hline(yintercept = -log10(0.05), colour = 'darkred', linetype = 2) +
+  geom_hline(yintercept = -log10(alpha), colour = 'darkred', linetype = 2) +
   cowplot::theme_cowplot(font_size = 11) +
   geom_label_repel(aes(label = gene_symbol), data = df_ann) +
   scale_colour_manual(values = c("TRUE"="black", "FALSE"="grey60"), guide = FALSE) +
@@ -132,7 +145,7 @@ saveRDS(last_plot(), params$grid_plot)
 
 
 ```{r}
-filter(df_pt, FDR < 0.05) %>% 
+filter(df_pt, FDR < alpha) %>% 
 ggplot(aes(x = forcats::fct_reorder(gsub("HALLMARK_", "", pathway), -FDR), y = -log10(FDR))) +
   geom_bar(aes(fill = Direction), stat = 'identity') +
   coord_flip() +
@@ -203,5 +216,26 @@ filter(df_pt, FDR < 0.05) %>%
 
 ```{r}
 saveRDS(last_plot(), params$pathway_plot)
+```
+
+
+# Save various statistics on the core geneset
+
+```{r}
+n_genes_coreset <- nrow(coregene_df)
+n_genes_coreset_up <- filter(coregene_df, logFC > 0) %>% nrow()
+n_genes_coreset_down <- filter(coregene_df, logFC < 0) %>% nrow()
+
+pct_genes_nfkb <- filter(n_df, pathway == "HALLMARK_TNFA_SIGNALING_VIA_NFKB") %>% .$pct_pathway_genes
+
+df_stat <- frame_data(
+  ~ description, ~ statistic,
+  "n_genes_coreset", n_genes_coreset,
+  "n_genes_coreset_up", n_genes_coreset_up,
+  "n_genes_coreset_down", n_genes_coreset_down,
+  "pct_genes_nfkb", pct_genes_nfkb
+)
+
+write_statistics(df_stat, file = params$coregene_stats)
 ```
 

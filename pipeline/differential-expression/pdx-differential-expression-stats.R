@@ -1,13 +1,17 @@
 
 library(aargh)
 library(dplyr)
+library(here)
 
-source("scripts/utils.R")
+source(here("scripts/utils.R"))
 
 collate_stats <- function(
   input_rds = "data/pdx_temp_de/v3/DE_results_pseudobulk_FALSE.rds",
-  output_csv = "output.csv",
-  alpha = 0.05) {
+  output_csv = "output.csv") {
+  
+  config <- get_config()
+  
+  alpha <- config$global_significance
   
   de_results <- readRDS(input_rds)
   de_results_edger <- de_results$edger_results
@@ -20,6 +24,8 @@ collate_stats <- function(
   
   total_upreg <- filter(de_results_signif, logFC > 0) %>% nrow()
   total_downreg <- filter(de_results_signif, logFC < 0) %>% nrow()
+  
+  # Core gene set
   
   
   df_stat <- frame_data(
