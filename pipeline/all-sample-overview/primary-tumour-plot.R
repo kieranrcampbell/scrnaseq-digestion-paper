@@ -56,11 +56,12 @@ make_fig <- function(input_sce = "input_sce",
   
   
   ggplot(cdata, aes(x = UMAP1, y = UMAP2, colour = cell_type)) +
-    geom_point() +
+    geom_point(alpha = 0.2) +
     facet_wrap(~ cancer_type, scales = "free") +
     scale_colour_manual(values=ct_cols,name='Cell type') +
-    theme(strip.background = element_rect(fill='white')) +
-    guides(colour = guide_legend(override.aes = list(size=2)))
+    theme(strip.background = element_rect(fill='white'),
+          strip.text = element_text(face = 'bold')) +
+    guides(colour = guide_legend(override.aes = list(size=2,alpha = 1)))
   
   umap_plot <- last_plot()
   
@@ -77,27 +78,30 @@ make_fig <- function(input_sce = "input_sce",
   digestion_cols <- c("6C cold protease"="#a6dba0",
                       "37C collagenase"="#008837")
     
+  pdf$cancer_type <- gsub(" ", "\n", pdf$cancer_type)
+  pdf$cell_type <- gsub("/", "/\n", pdf$cell_type)
   
   dplyr::filter(pdf, cell_type != "other") %>% 
     ggplot(aes(x = patient_id, y = p, fill = enzyme_mix)) +
     geom_bar(stat = 'identity', position = 'dodge', colour = 'grey30', size=.2) +
-    facet_wrap(~ cell_type, scale = "free_x", nrow = 2) +
+    facet_grid(cancer_type ~ cell_type, scale = "free", space = "free_y") +
     coord_flip() +
     theme(legend.position = "bottom",
           strip.background = element_rect(fill='white')) +
     labs(y = "Proportion of cells", x = "Patient ID") +
     scale_colour_manual(values = cancer_cols, name="Cancer type") +
     scale_fill_brewer(palette = "Blues", name = "Enzyme mix") +
-    theme(axis.text.x = element_text(size = 7))
+    theme(axis.text.x = element_text(size = 7, angle=-90, hjust=0, vjust=0.5),
+          strip.text = element_text(size = 9, face='bold'))
   
   prop_plot <- last_plot()
   
-  plt <- plot_grid(plot_grid(NULL, NULL, nrow = 1, labels = c("A", "B")), 
+  plt <- plot_grid(plot_grid(NULL, NULL, nrow = 1, labels = c("A", "B"), rel_heights = c(4,3)), 
             plot_grid(umap_plot, prop_plot, ncol = 1, labels = c("C", "D")), 
             ncol = 1,
             rel_heights = c(1,2.1))
   
-  ggsave(output_fig, width = 10, height = 11)
+  ggsave(output_fig, width = 9.8, height = 10.2)
 
 }
 
