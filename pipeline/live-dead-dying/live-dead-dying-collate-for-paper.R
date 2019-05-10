@@ -26,16 +26,18 @@ ldd_collate <- function(results = "figs/live-dead-dying/ldd_v3.rds",
   
   for(i in seq_len(nrow(df_pct_mito))) {
     d <- df_pct_mito[i,]
-    stats[[paste0("pct_mito_", d$cell_status)]] <- d$median_pct_mito
+    stats[[paste0("pct_mito_", d$cell_status)]] <- signif(d$median_pct_mito, 3)
   }
   
   stats$t_test_dead_vs_live <- filter(col_data, cell_status %in% c("Dead", "Live")) %>% 
     t.test(pct_counts_mito ~ cell_status, data = .) %>% 
-    .$p.value
+    .$p.value %>% 
+    signif(3)
   
   stats$t_test_dead_vs_dying <- filter(col_data, cell_status %in% c("Dead", "Dying")) %>% 
     t.test(pct_counts_mito ~ cell_status, data = .) %>% 
-    .$p.value
+    .$p.value %>% 
+    signif(3)
   
   
   consistent_theme <- function() {
