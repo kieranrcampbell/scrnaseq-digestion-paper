@@ -90,7 +90,7 @@ make_fig <- function(input_sce = "input_sce",
           strip.background = element_rect(fill='white')) +
     labs(y = "Proportion of cells", x = "Patient ID") +
     scale_colour_manual(values = cancer_cols, name="Cancer type") +
-    scale_fill_brewer(palette = "Blues", name = "Enzyme mix") +
+    scale_fill_brewer(palette = "Blues", name = "Digestion method") +
     theme(axis.text.x = element_text(size = 7, angle=-90, hjust=0, vjust=0.5),
           strip.text = element_text(size = 9, face='bold'))
   
