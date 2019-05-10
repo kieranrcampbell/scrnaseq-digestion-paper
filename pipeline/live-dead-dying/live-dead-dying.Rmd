@@ -399,7 +399,9 @@ results <- list(
   mito_boxplot = mito_boxplot,
   pca_plot = pca_plot,
   enrich_plot = enrich_plot,
-  edger_results = tt_all
+  edger_results = tt_all,
+  design = design, 
+  col_data = col_data
 )
 
 saveRDS(results, params$output_rds)

@@ -6,7 +6,7 @@ deliverables['live-dead-dying-de-results'] = expand("data/deliverables/live_dead
                                                     cv=cellranger_versions)
 
 
-rule live_dead_dying analysis:
+rule live_dead_dying_analysis:
     params:
         curr_dir = os.getcwd()
     output:
@@ -24,10 +24,12 @@ rule collate_analysis:
         "figs/live-dead-dying/ldd_{cv}.rds",
     output:
         png="figs/live-dead-dying/ldd_{cv}.png",
-        csv="data/deliverables/live-dead-dying_de-{cv}.csv"
+        csv="data/deliverables/live-dead-dying_de-{cv}.csv",
+	stats="data/statistics/live_dead_dying_{cv}.csv"
     shell:
         "Rscript pipeline/live-dead-dying/live-dead-dying-collate-for-paper.R \
         --results {input} \
+	--output_stats {output.stats} \
         --output_png {output.png} \
         --output_csv {output.csv}"
         
