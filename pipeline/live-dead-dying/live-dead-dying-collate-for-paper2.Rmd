@@ -1,0 +1,73 @@
+---
+title: "Analyze live-dead-dying samples"
+author: "Kieran R Campbell"
+output:
+  html_document: 
+    toc: true
+    toc_float: true
+  html_notebook: default
+params:
+  cellranger_version: v3
+  output_rds: 'output.rds'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      cache = FALSE)
+
+suppressPackageStartupMessages({
+  library(SingleCellExperiment)
+  library(tidyverse)
+  library(ggrepel)
+  library(glue)
+  library(here)
+  library(ggsignif)
+  library(cowplot)
+})
+
+select <- dplyr::select
+mutate <- dplyr::mutate
+arrange <- dplyr::arrange
+rename <- dplyr::rename
+```
+
+```{r}
+  consistent_theme <- function() {
+    theme(
+      axis.text = element_text(size = 9, colour = 'black'),
+      axis.title = element_text(size = 10, colour = 'black'),
+      legend.title = element_text(size = 10, colour = 'black'),
+      legend.text = element_text(size = 9, colour = 'black'),
+      strip.background = element_rect(fill = 'white'),
+      strip.text = element_text(face = 'bold', size = 10)
+    )
+  } 
+```
+
+Load previous results
+
+```{r}
+intermediate_results <- readRDS(here("data/live-dead-dying/ldd-intermediate-results-v3.rds"))
+lowmito_de <- readRDS(here("data/live-dead-dying/ldd-lowmito-de-v3.rds"))
+cluster_de <- readRDS(here("data/live-dead-dying/ldd-cluster-de-v3.rds"))
+```
+
+
+```{r}
+sce_filt <- sce[rowSums(as.matrix(counts(sce))) > 10, ]
+```
+
+Quick QQ plot
+
+```{r}
+df_qq <- tibble(
+  lowmito = lowmito_de$tt$logFC,
+  cluster = cluster_de$tt_2vs1$logFC
+)
+
+abline(0, 1, col='red')
+```
+
+
+
+

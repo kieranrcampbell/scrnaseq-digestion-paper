@@ -1,0 +1,357 @@
+---
+title: "Analyze live-dead-dying samples"
+author: "Kieran R Campbell"
+output:
+  html_document: 
+    toc: true
+    toc_float: true
+  html_notebook: default
+params:
+  cellranger_version: v3
+  output_rds: 'output.rds'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      cache = FALSE)
+
+suppressPackageStartupMessages({
+  library(scater)
+  library(DropletUtils)
+  library(SingleCellExperiment)
+  library(biomaRt)
+  library(dplyr)
+  library(limma)
+  library(edgeR)
+  library(tidyverse)
+  library(ggrepel)
+  library(org.Hs.eg.db)
+  library(glue)
+  library(here)
+  library(scran)
+  library(uwot)
+  library(ggsignif)
+  library(cowplot)
+})
+
+select <- dplyr::select
+mutate <- dplyr::mutate
+arrange <- dplyr::arrange
+rename <- dplyr::rename
+```
+
+```{r}
+  consistent_theme <- function() {
+    theme(
+      axis.text = element_text(size = 9, colour = 'black'),
+      axis.title = element_text(size = 10, colour = 'black'),
+      legend.title = element_text(size = 10, colour = 'black'),
+      legend.text = element_text(size = 9, colour = 'black'),
+      strip.background = element_rect(fill = 'white'),
+      strip.text = element_text(face = 'bold', size = 10)
+    )
+  } 
+```
+
+Read in the data:
+
+```{r}
+sce_files <- dir(glue(here("data/scesets/{params$cellranger_version}/")), full.names = TRUE, pattern = "SA928")
+
+sce_files <- sce_files[grepl("raw", sce_files)]
+
+sces <- lapply(sce_files, readRDS)
+
+sces <- lapply(sces, function(sce) {
+  rowData(sce)[,-c(1:2)] <- NULL
+  colData(sce)$GSC_BRC <- NULL
+  sce
+})
+
+# sces <- lapply(sces, function(sce) {
+#   sce[, sample(ncol(sce), 200),]
+# })
+
+sce <- do.call("cbind", sces)
+```
+
+
+```{r}
+sces_mnn <- do.call(fastMNN, c(sces, approximate = TRUE))
+```
+
+```{r}
+reducedDims(sce)[['mnn']] <- sces_mnn$corrected
+reducedDims(sce)[['mnn_pca']] <- prcomp(reducedDim(sce, 'mnn'), scale = TRUE)$x
+```
+
+```{r}
+plotReducedDim(sce, "mnn_pca", colour_by = "cell_status")
+plotReducedDim(sce, "mnn_pca", colour_by = "pct_counts_mito")
+plotReducedDim(sce, "mnn_pca", colour_by = "total_features_by_counts")
+```
+
+
+
+```{r}
+set.seed(123L)
+
+d <- dist((reducedDim(sce, 'mnn')))
+hc <- hclust(d)
+
+cuts <- cutree(hc, 3)
+
+sce$cluster <- factor(cuts)
+
+plotReducedDim(sce, 'mnn', colour_by = 'cluster')
+plotReducedDim(sce, 'mnn_pca', colour_by = 'cluster')
+```
+
+
+
+# Plots
+
+Colour palettes:
+
+```{r}
+cols_cell_status <- c(
+  "Live"="#7bccc4",
+  "Dying"="#43a2ca",
+  "Dead"="#0868ac"
+)
+
+cols_cluster <- c(
+  "1"="#1b9e77",
+  "2"="#d95f02",
+  "3"="#7570b3"
+)
+```
+
+
+Prepare data frame
+
+
+```{r}
+
+cdata <- colData(sce) %>% 
+  as.data.frame() %>% 
+  dplyr::select(pct_counts_mito, cell_status, total_features_by_counts, cluster) %>% 
+  dplyr::mutate(mnn_pc1 = reducedDim(sce, 'mnn_pca')[,1],
+         mnn_pc2 = reducedDim(sce, 'mnn_pca')[,2]) %>% 
+  as_tibble() %>% 
+  mutate(cell_status = stringr::str_to_title(cell_status)) %>% 
+  mutate(cell_status = factor(cell_status, levels = c("Live", "Dying", "Dead")))
+```
+
+PCA by cell status:
+
+```{r}
+ggplot(cdata, aes(x = mnn_pc1, y = mnn_pc2, colour = cell_status), alpha = 0.6) +
+  geom_point(data = select(cdata, -cell_status), colour = 'grey80') +
+  geom_point() +
+  facet_wrap(~ cell_status) +
+  consistent_theme() +
+  scale_colour_manual(values = cols_cell_status) +
+  theme(legend.position = "none") +
+  labs(x = "PC1", y = "PC2")
+
+pca_by_cell_status <- last_plot()
+```
+
+
+PCA by % mito:
+
+```{r}
+ggplot(cdata, aes(x = mnn_pc1, y = mnn_pc2, colour = pct_counts_mito), alpha = 0.6) +
+  geom_point() +
+  consistent_theme() +
+  viridis::scale_color_viridis(name = "% transcriptome mitochondrial") +
+  labs(x = "PC1", y = "PC2") +
+  theme(legend.position = "top")
+
+pca_by_mito <- last_plot()
+```
+
+Mito by cell status:
+
+
+```{r, fig.width = 4, fig.height = 3}
+cdata %>%   
+  ggplot(aes(x = cell_status, y = pct_counts_mito, fill = cell_status)) +
+  geom_boxplot(outlier.size = 1) +
+  cowplot::theme_cowplot() +
+  theme(legend.position = "none",
+        strip.background = element_rect(fill = 'white')) +
+  labs(x = "Cell status", y = "% counts mitochondrial") +
+  scale_fill_manual(values = cols_cell_status) +
+  consistent_theme() +
+    ggsignif::geom_signif(comparisons = list(c("Dead", "Dying"), c("Dead", "Live")), 
+                          map_signif_level = TRUE, 
+                          y_position = c(104, 115)) +
+    scale_y_continuous(breaks = c(0, 25, 50, 75, 100), limits = c(-5, 130))
+
+mito_by_cell_status <- last_plot()
+```
+
+```{r}
+top_grid <- plot_grid(pca_by_cell_status, pca_by_mito, mito_by_cell_status,
+                      rel_widths = c(2,.7,0.5), 
+                      labels = "AUTO", nrow = 1)
+```
+
+
+PCA by cluster:
+
+```{r}
+ggplot(cdata, aes(x = mnn_pc1, y = mnn_pc2, colour = cluster), alpha = 0.6) +
+  geom_point(alpha = 0.4) +
+  consistent_theme() +
+  scale_colour_manual(values = cols_cluster, name = "Cluster") +
+  labs(x = "PC1", y = "PC2") +
+  theme(legend.position = "top")
+
+pca_by_cluster <- last_plot()
+```
+
+
+Mito by cluster
+
+```{r, fig.width = 4, fig.height = 3}
+cdata %>%   
+  ggplot(aes(x = cluster, y = pct_counts_mito, fill = cluster)) +
+  geom_boxplot(outlier.size = 1) +
+  cowplot::theme_cowplot() +
+  theme(legend.position = "none",
+        strip.background = element_rect(fill = 'white')) +
+  labs(x = "Cluster", y = "% counts mitochondrial") +
+  scale_fill_manual(values = cols_cluster) +
+  consistent_theme() +
+    ggsignif::geom_signif(comparisons = list(c("1", "2"), c("2", "3")), 
+                          map_signif_level = TRUE, 
+                          y_position = c(104, 115)) +
+    scale_y_continuous(breaks = c(0, 25, 50, 75, 100), limits = c(-5, 130))
+
+mito_by_cluster <- last_plot()
+```
+
+Cluster by cell status
+
+```{r, fig.width = 4, fig.height = 3}
+cs_count <- count(cdata, cell_status)
+
+from <- cs_count$cell_status
+to <- paste0(cs_count$cell_status, " (n=", cs_count$n, ")")
+
+cols_cell_status2 <- cols_cell_status
+names(cols_cell_status2) <- plyr::mapvalues(names(cols_cell_status2), from = from, to = to)
+
+cdata$cell_status_tag <- plyr::mapvalues(cdata$cell_status, from = from, to = to)
+
+cdata %>% 
+  ggplot(aes(x = cluster, fill = cell_status_tag)) +
+  geom_bar(position = "fill") +
+  scale_fill_manual(values = cols_cell_status2, name = "Cell status") +
+  labs(x = "Cluster", y = "Proportion of cells") +
+  consistent_theme() 
+
+cluster_by_cell_status <- last_plot()
+```
+
+
+
+
+Quick and dirty fm
+
+```{r}
+rownames(sce) <- paste0(rowData(sce)$Symbol, "_", rownames(sce))
+fm <- findMarkers(sce, sce$cluster)
+```
+
+
+```{r}
+saveRDS(
+  list(
+    sce = sce,
+    cdata = cdata
+  ),
+  here("data/live-dead-dying/ldd_sce.rds")
+)
+```
+
+
+This should find MHC class I activation in cluster 2 so plot
+
+```{r}
+mhc_i <- grep("^B2M|HLA-[A-C]", rowData(sce)$Symbol)
+
+mhc_lc <- as.data.frame(t(as.matrix(logcounts(sce)[mhc_i,])))
+names(mhc_lc) <- rowData(sce)$Symbol[mhc_i]
+
+cdata_mhc <- cbind(cdata, mhc_lc)
+```
+
+And plot
+
+```{r fig.width=4, fig.height = 4}
+df_mhc <- select(cdata_mhc, starts_with("mnn"), cluster, starts_with("HLA"), B2M) %>% 
+  gather(gene, expression, -mnn_pc1, -mnn_pc2, -cluster) %>% 
+  as_tibble()
+
+
+
+
+ggplot(df_mhc, aes(x = cluster, y = expression, fill = cluster)) +
+  geom_violin() +
+  facet_wrap(~ gene, nrow = 2) +
+  consistent_theme() +
+  labs(y = "Expression (log normalized counts)",
+       x = "Cluster") +
+  scale_fill_manual(values = cols_cluster) +
+  theme(legend.position = "none") +
+  ggsignif::geom_signif(comparisons = list(c("1", "2"), c("2", "3")), 
+                          map_signif_level = TRUE, 
+                          y_position = c(12, 13)) +
+  scale_y_continuous(limits = c(-0.5, 14))
+
+hla_plot <- last_plot()
+```
+
+```{r}
+middle_grid <- plot_grid(pca_by_cluster, cluster_by_cell_status, mito_by_cluster, hla_plot,
+                         nrow = 1, labels = c("D", "E", "F", "G"),
+                         rel_widths = c(1, 0.9, 0.7, 0.7))
+```
+
+temporary overall plot
+
+```{r}
+tmp_plot <- plot_grid(top_grid, middle_grid, ncol = 1)
+
+# ggsave("../../figs/deleteme.png", width = 13, height = 6)
+```
+
+# Save outputs for differential expression
+
+```{r}
+sce1 <- sce[, sce$pct_counts_mito <= 10 & sce$cell_status %in% c("live", "dead")]
+```
+
+
+```{r}
+
+plots <- list(
+  pca_by_cell_status, pca_by_mito, mito_by_cell_status,
+  pca_by_cluster, cluster_by_cell_status, mito_by_cluster, hla_plot
+)
+
+outputs <- list(
+  sce = sce,
+  sce1 = sce1,
+  cdata = cdata,
+  plots = plots
+)
+
+saveRDS(outputs, params$output_rds)
+```
+
+
