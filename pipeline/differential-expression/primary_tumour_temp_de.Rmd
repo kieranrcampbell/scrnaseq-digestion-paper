@@ -37,6 +37,7 @@ suppressPackageStartupMessages({
   library(ggrepel)
   library(org.Hs.eg.db)
   library(here)
+  library(scran)
 })
 
 filter <- dplyr::filter
@@ -91,6 +92,7 @@ Collapse counts to temperature and patient specific
 ids <- sort(unique(sce$id))
 
 if(pseudobulk) {
+  stop("Pseudobulk no longer supported")
   sces <- lapply(ids, function(id) sce[, sce$id == id])
   
   count_mat <- sapply(sces, get_summed_counts)
@@ -98,9 +100,10 @@ if(pseudobulk) {
   patient_ids <- sapply(sces, function(sce) sce$patient_id[1])
   digestion_temperatures <- sapply(sces, function(sce) sce$digestion_temperature[1])
 } else {
-  count_mat <- as.matrix(counts(sce))
   patient_ids <- sce$patient_id
   digestion_temperatures <- sce$digestion_temperature
+  nc <- median(table(sce$id))
+  sce <- computeSumFactors(sce)
 }
 ```
 
@@ -109,13 +112,18 @@ if(pseudobulk) {
 # Differential expression - edgeR-QTL
 
 ```{r}
-count_mat_filtered <- count_mat[rowSums(count_mat) > 10, ]
+sce_de <- sce[rowSums(as.matrix(counts(sce))) > 10,]
 
-dge <- DGEList(count_mat_filtered) # , group = factor(ids))
-dge <- calcNormFactors(dge)
+# count_mat_filtered <- count_mat[rowSums(count_mat) > 10, ]
+# 
+# dge <- DGEList(count_mat_filtered) # , group = factor(ids))
+# dge <- calcNormFactors(dge)
+# 
+# cdr <- scale(colMeans(count_mat_filtered > 0))[,1]
 
-cdr <- scale(colMeans(count_mat_filtered > 0))[,1]
-design <- model.matrix(~ cdr + patient_ids + factor(digestion_temperatures == 37))
+design <- model.matrix(~ patient_ids + factor(digestion_temperatures == 37))
+
+dge <- convertTo(sce, type = 'edgeR')
   
 dge <- estimateDisp(dge, design = design)
 fit <- glmQLFit(dge, design = design)
