@@ -49,3 +49,24 @@ write_statistics <- function(df_stats,
 get_config <- function(config_file = 'private_config.yaml') {
   read_yaml(here('private_config.yaml'))
 }
+
+consistent_theme <- function() {
+  theme(
+    axis.text = element_text(size = 9, colour = 'black'),
+    axis.title = element_text(size = 10, colour = 'black'),
+    legend.title = element_text(size = 10, colour = 'black'),
+    legend.text = element_text(size = 9, colour = 'black'),
+    strip.background = element_rect(fill = 'white'),
+    strip.text = element_text(face = 'bold', size = 10)
+  )
+} 
+
+
+digestion_temp_colours <- function() {
+  c(
+  "42"="#b01111",
+  "37"="#b4451f",
+  "24"="#dd9f40",
+  "6"="#62a1db"
+  )
+}
