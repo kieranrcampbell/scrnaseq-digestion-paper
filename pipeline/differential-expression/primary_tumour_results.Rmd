@@ -26,9 +26,12 @@ suppressPackageStartupMessages({
   library(glue)
   library(ggrepel)
   library(here)
+  library(biomaRt)
 })
 
 select <- dplyr::select
+
+source(here('scripts/utils.R'))
 ```
 
 
@@ -193,4 +196,38 @@ cowplot::plot_grid(de_grid, pathway_plot, nrow = 1, labels = 'AUTO',
 
 ggsave(params$output_fig, width = 14, height = 5)
 ```
+
+
+# What looks the same and what looks different
+
+```{r}
+unique_ensembl <- unique(df$ensembl_gene_id)
+
+ensembl <- useMart("ensembl")
+ensembl <- useDataset("hsapiens_gene_ensembl", mart=ensembl)
+bm <- getBM(attributes = c("ensembl_gene_id", "hgnc_symbol"),
+      filters = c("ensembl_gene_id"),
+      values = unique_ensembl,
+      mart = ensembl) %>% 
+  as_data_frame()
+
+dfs <- inner_join(df, bm)
+```
+
+```{r fig.width = 6, fig.height = 6}
+
+dfs <- filter(dfs, !(cell_type %in% c("B cells", "Plasma cells", "other"))) 
+
+dfv <- group_by(dfs, ensembl_gene_id) %>% 
+  summarise(var_logFC = var(logFC))
+
+top_n(dfv, 20, var_logFC) %>% 
+  inner_join(dfs) %>% 
+  ggplot(aes(x = cell_type, y = logFC)) +
+  facet_wrap(~ hgnc_symbol, scales = "free_x") +
+  geom_bar(stat = 'identity') +
+  coord_flip() +
+  consistent_theme()
+```
+
 

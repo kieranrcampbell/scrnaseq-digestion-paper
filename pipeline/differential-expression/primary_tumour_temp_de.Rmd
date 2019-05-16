@@ -123,7 +123,7 @@ sce_de <- sce[rowSums(as.matrix(counts(sce))) > 10,]
 
 design <- model.matrix(~ patient_ids + factor(digestion_temperatures == 37))
 
-dge <- convertTo(sce, type = 'edgeR')
+dge <- convertTo(sce_de, type = 'edgeR')
   
 dge <- estimateDisp(dge, design = design)
 fit <- glmQLFit(dge, design = design)

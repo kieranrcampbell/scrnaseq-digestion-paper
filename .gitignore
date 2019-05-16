@@ -2,4 +2,6 @@ sessions/
 *.html
 *~
 private_config.yaml
+*.png
+*.pdf
 

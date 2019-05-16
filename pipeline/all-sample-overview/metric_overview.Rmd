@@ -228,12 +228,7 @@ sample_type_cols <- c(
   "PDX"="#570D32"
 )
 
-digestion_temp_colours <- c(
-  "42"="#b01111",
-  "37"="#b4451f",
-  "24"="#dd9f40",
-  "6"="#62a1db"
-)
+
 
 
 
@@ -276,7 +271,7 @@ plt3 <- base_plot +
 
 plt4 <- base_plot +
   geom_point(aes(colour = `Digestion temperature`), size = 0.1, alpha = 0.3) +
-  scale_colour_manual(values = digestion_temp_colours, name = "Digestion temperature")
+  scale_colour_manual(values = digestion_temp_colours(), name = "Digestion temperature")
 
 
 umap_plot <- plot_grid(

@@ -34,6 +34,8 @@ all_figs['primary-tumour-de'] = expand("figs/differential-expression/primary_tum
                                        cv=cellranger_versions,
                                        pb=pseudobulk)
 
+deliverables['coregene-df'] = ['data/deliverables/coregene_df-FALSE-v3.csv']
+
 rule pdx_de:
     params:
         curr_dir=os.getcwd()
@@ -76,7 +78,8 @@ rule pdx_results:
         grid="figs/pdx_temp_de/grid_{cv}_pseudobulk_{pb}.rds",
         pathway="figs/pdx_temp_de/pathway_{cv}_pseudobulk_{pb}.rds",
         report="reports/pdx_temp_de/collated_report_{cv}_pseudobulk_{pb}.html",
-        stats="data/statistics/coregeneset_{pb}_{cv}.csv"
+        stats="data/statistics/coregeneset_{pb}_{cv}.csv",
+        coregene_df="data/deliverables/coregene_df-{pb}-{cv}.csv"
     shell:
         "Rscript -e \"rmarkdown::render('pipeline/differential-expression/pdx_results.Rmd', \
         output_file='{params.curr_dir}/{output.report}', \
@@ -84,6 +87,7 @@ rule pdx_results:
         params=list(cellranger_version='{wildcards.cv}', \
         input_rds='{input.rds}',\
         coregene_stats='{output.stats}',\
+        coregene_csv='{output.coregene_df}',\
         volcano_plot='{output.volcano}',\
         grid_plot='{output.grid}',\
         pathway_plot='{output.pathway}',\

@@ -36,6 +36,7 @@ suppressPackageStartupMessages({
   library(org.Hs.eg.db)
   library(fgsea)
   library(here)
+  library(scran)
 })
 
 filter <- dplyr::filter
@@ -94,6 +95,9 @@ sces[sapply(sces, is.null)] <- NULL
 ```
 
 
+Remove mouse cells:
+
+
 
 Collapse counts to temperature and patient specific
 
@@ -103,7 +107,7 @@ Collapse counts to temperature and patient specific
 sce <- NULL
 
 if(pseudobulk) {
-
+  stop("Pseudobulk no longer supported")
   count_mat <- sapply(sces, get_summed_counts)
   
   ids <- sapply(sces, function(sce) sce$sample_id[1])
@@ -117,17 +121,19 @@ if(pseudobulk) {
   
   sce <- do.call("cbind", sces)
   
-  count_mat <- as.matrix(counts(sce))
   
-  ids <- sce$sample_id
-  digestion_temperatures <- sce$digestion_temperature
 }
 ```
 
-Remove mouse cells:
 
 ```{r}
 sce <- remove_mouse_cells(sce)
+```
+
+```{r}
+
+ids <- sce$sample_id
+digestion_temperatures <- sce$digestion_temperature
 ```
 
 
@@ -145,13 +151,18 @@ table(sce$digestion_temperature)
 # Differential expression - edgeR-QTL
 
 ```{r}
-count_mat_filtered <- count_mat[rowSums(count_mat) > 10, ]
+# count_mat_filtered <- count_mat[rowSums(count_mat) > 10, ]
+# 
+# dge <- DGEList(count_mat_filtered) # , group = factor(ids))
+# dge <- calcNormFactors(dge)
+# 
+# cdr <- scale(colMeans(count_mat_filtered > 0))[,1]
 
-dge <- DGEList(count_mat_filtered) # , group = factor(ids))
-dge <- calcNormFactors(dge)
+sce_de <- sce[rowSums(as.matrix(counts(sce))) > 10, ]
 
-cdr <- scale(colMeans(count_mat_filtered > 0))[,1]
-design <- model.matrix(~ cdr + ids + factor(digestion_temperatures == 37))
+dge <- convertTo(sce_de, type = 'edgeR')
+
+design <- model.matrix(~ ids + factor(digestion_temperatures == 37))
   
 dge <- estimateDisp(dge, design = design)
 fit <- glmQLFit(dge, design = design)

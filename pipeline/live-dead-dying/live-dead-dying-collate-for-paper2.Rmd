@@ -220,13 +220,16 @@ stats$t_test_dead_vs_dying <- filter(intermediate_results$cdata, cell_status %in
 cluster composition statistics:
 
 ```{r}
+words <- c('one', 'two', 'three')
+names(words) <- as.character(1:3)
+
 cell_props <- group_by(intermediate_results$cdata, cluster) %>% 
   count(cell_status) %>% 
   mutate(p = n / sum(n)) %>% ungroup()
 
 for(i in seq_len(nrow(cell_props))) {
   d <- cell_props[i,]
-  description <- glue("cell_pct_{d$cluster}_status_{d$cell_status}")
+  description <- glue("cell_pct_{words[as.character(d$cluster)]}_status_{d$cell_status}")
   stat <- signif(100*d$p, 2)
   stats[[description]] <- stat
 }
@@ -239,7 +242,7 @@ df_pct_mito <- group_by(intermediate_results$cdata, cluster) %>%
 
 for(i in seq_len(nrow(df_pct_mito))) {
   d <- df_pct_mito[i,]
-  stats[[paste0("pct_mito_cluster", d$cluster)]] <- signif(d$median_pct_mito, 3)
+  stats[[paste0("pct_mito_cluster", words[as.character(d$cluster)])]] <- signif(d$median_pct_mito, 3)
 }
 ```
 
