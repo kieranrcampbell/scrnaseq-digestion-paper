@@ -22,20 +22,18 @@ rule umap:
         sces_qc,
         config['murine_contamination_csv']
     output:
-        rds="figs/all-sample-overview/umap_all_{cv}.rds",
-        png="figs/all-sample-overview/umap_all_{cv}.png"
+        'data/all-sample-overview/umap_df-{cv}.csv'
     shell:
         "Rscript pipeline/all-sample-overview/umap-all-samples.R \
         --cellranger_version {wildcards.cv} \
-        --output_png {output.png} \
-        --output_rds {output.rds} "
+        --output_csv {output} "
 
 rule overview:
     params:
         curr_dir = os.getcwd()
     input:
         sces_qc,
-        umap_fig="figs/all-sample-overview/umap_all_{cv}.rds"
+        umap_csv='data/all-sample-overview/umap_df-{cv}.csv'        
     output:
         figure="figs/all-sample-overview/all_sample_overview-{cv}.png",
         pct_mito_fig="figs/all-sample-overview/pct_counts_mito_all_samples-{cv}.png",
@@ -46,7 +44,7 @@ rule overview:
         output_file='{params.curr_dir}/{output.report}', \
         knit_root_dir='{params.curr_dir}',\
         params=list(cellranger_version='{wildcards.cv}', \
-        input_umap_rds='{input.umap_fig}', \
+        umap_csv='{input.umap_csv}', \
         output_figure='{output.figure}', \
         stats_file='{output.stats}', \
         pct_mito_fig='{output.pct_mito_fig}'))\" "
@@ -54,7 +52,7 @@ rule overview:
 
 rule primary_tumour_fig:
     input:
-        "data/primary_tumour_analysis/v5/sce_final_annotated/v3.rds"
+        "data/primary_tumour_analysis/v6/sce_final_annotated/v3.rds"
     output:
         pt_fig
     shell:

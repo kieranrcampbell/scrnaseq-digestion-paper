@@ -46,8 +46,7 @@ remove_hg19 <- function(sce) {
 }
 
 make_umap_plot <- function(cellranger_version = "v3",
-                           output_png = "output.png",
-                           output_rds = "output.rds") {
+                           output_csv = 'output.csv') {
   all_qcd <- dir(here(glue("data/scesets/{cellranger_version}")), full.names = TRUE, pattern = "qc")
   
   
@@ -113,97 +112,103 @@ make_umap_plot <- function(cellranger_version = "v3",
                     TRUE ~ "PDX"
                   ))
   
-  
-  cols <- c(
-    "Cell line"="#1d3554",
-    "Patient"="#42858C",
-    "PDX"="#570D32"
-  )
-  
-  
-  ggplot(um_df, aes(x = V1, y = V2)) +
-    geom_point(aes(colour = sample_type), alpha = 0.5, size = 0.1) +
-    labs(x = "UMAP1", y = "UMAP2") +
-    # scale_color_manual(values = cols) +
-    labs(x = "UMAP1", y = "UMAP2") +
-    cowplot::theme_cowplot(font_size = 11) +
-    theme(legend.title = element_blank())
-  
-  ggplot(um_df, aes(x = V1, y = V2)) +
-    geom_point(aes(colour = pct_counts_mito), alpha = 0.5, size = 0.1) +
-    labs(x = "UMAP1", y = "UMAP2") +
-    labs(x = "UMAP1", y = "UMAP2") +
-    cowplot::theme_cowplot(font_size = 11) +
-    theme(legend.title = element_blank()) +
-    viridis::scale_colour_viridis()
-  
-  ggplot(um_df, aes(x = V1, y = V2)) +
-    geom_point(aes(colour = pct_counts_ribo), alpha = 0.5, size = 0.1) +
-    labs(x = "UMAP1", y = "UMAP2") +
-    labs(x = "UMAP1", y = "UMAP2") +
-    cowplot::theme_cowplot(font_size = 11) +
-    theme(legend.title = element_blank()) +
-    viridis::scale_colour_viridis()
-  
-  
-  
-  # Ok we need to tidy up um_df before proceeding
-  
-  um_df <- rename(um_df,
-                  `Cancer type` = cancer_type,
-                  Substrate = sample_type,
-                  `Digestion temperature` = digestion_temperature,
-                  `Tissue state` = tissue_state,
-                  `Cell status` = cell_status)
-  
-  um_df <- mutate(um_df,
-                  `Cell status` = stringr::str_to_title(`Cell status`),
-                  `Tissue state` = case_when(
-                    `Tissue state` == 'digested_fresh' ~ "Fresh",
-                    `Tissue state` == "frozen" ~ "Frozen",
-                    TRUE ~ "Fresh"
-                  ),
-                  `Digestion temperature` = as.factor(`Digestion temperature`)
-  )
-  
-  base_plot <- ggplot(um_df, aes(x = V1, y = V2)) +
-    labs(x = "UMAP1", y = "UMAP2") +
-    labs(x = "UMAP1", y = "UMAP2") +
-    cowplot::theme_cowplot(font_size = 7) +
-    theme(legend.position = "top") +
-    guides(colour = guide_legend(override.aes = list(size=2)))
-  
-  plt1 <- base_plot + 
-    geom_point(aes(colour = `Cell status`), size = 0.1) +
-    scale_colour_brewer(palette = "Set1", name = "Cell status")
-  
-  plt2 <- base_plot + 
-    geom_point(aes(colour = Substrate), size = 0.1) +
-    scale_colour_brewer(palette = "Set2")
-  
-  plt3 <- base_plot +
-    geom_point(aes(colour = `Tissue state`), size = 0.1) +
-    scale_colour_brewer(palette = "Dark2", name = "Tissue state")
-  
-  plt4 <- base_plot +
-    geom_point(aes(colour = `Digestion temperature`), size = 0.1) +
-    scale_colour_brewer(palette = "Blues", name = "Digestion temperature")
-  
-  
-  plot_grid(
-    plt1, plt2, plt3, plt4,
-    nrow = 1
-  )
-  
-  
-  saveRDS(last_plot(),
-          output_rds)
-  
-  ggsave(output_png, width = 12, height = 4)
+  write_csv(um_df, output_csv)
   
 }
 
 aargh(make_umap_plot)
 
 
+
+
+
+
+
+# 
+# cols <- c(
+#   "Cell line"="#1d3554",
+#   "Patient"="#42858C",
+#   "PDX"="#570D32"
+# )
+# 
+# 
+# ggplot(um_df, aes(x = V1, y = V2)) +
+#   geom_point(aes(colour = sample_type), alpha = 0.5, size = 0.1) +
+#   labs(x = "UMAP1", y = "UMAP2") +
+#   # scale_color_manual(values = cols) +
+#   labs(x = "UMAP1", y = "UMAP2") +
+#   cowplot::theme_cowplot(font_size = 11) +
+#   theme(legend.title = element_blank())
+# 
+# ggplot(um_df, aes(x = V1, y = V2)) +
+#   geom_point(aes(colour = pct_counts_mito), alpha = 0.5, size = 0.1) +
+#   labs(x = "UMAP1", y = "UMAP2") +
+#   labs(x = "UMAP1", y = "UMAP2") +
+#   cowplot::theme_cowplot(font_size = 11) +
+#   theme(legend.title = element_blank()) +
+#   viridis::scale_colour_viridis()
+# 
+# ggplot(um_df, aes(x = V1, y = V2)) +
+#   geom_point(aes(colour = pct_counts_ribo), alpha = 0.5, size = 0.1) +
+#   labs(x = "UMAP1", y = "UMAP2") +
+#   labs(x = "UMAP1", y = "UMAP2") +
+#   cowplot::theme_cowplot(font_size = 11) +
+#   theme(legend.title = element_blank()) +
+#   viridis::scale_colour_viridis()
+# 
+# 
+# 
+# # Ok we need to tidy up um_df before proceeding
+# 
+# um_df <- rename(um_df,
+#                 `Cancer type` = cancer_type,
+#                 Substrate = sample_type,
+#                 `Digestion temperature` = digestion_temperature,
+#                 `Tissue state` = tissue_state,
+#                 `Cell status` = cell_status)
+# 
+# um_df <- mutate(um_df,
+#                 `Cell status` = stringr::str_to_title(`Cell status`),
+#                 `Tissue state` = case_when(
+#                   `Tissue state` == 'digested_fresh' ~ "Fresh",
+#                   `Tissue state` == "frozen" ~ "Frozen",
+#                   TRUE ~ "Fresh"
+#                 ),
+#                 `Digestion temperature` = as.factor(`Digestion temperature`)
+# )
+# 
+# base_plot <- ggplot(um_df, aes(x = V1, y = V2)) +
+#   labs(x = "UMAP1", y = "UMAP2") +
+#   labs(x = "UMAP1", y = "UMAP2") +
+#   cowplot::theme_cowplot(font_size = 7) +
+#   theme(legend.position = "top") +
+#   guides(colour = guide_legend(override.aes = list(size=2)))
+# 
+# plt1 <- base_plot + 
+#   geom_point(aes(colour = `Cell status`), size = 0.1) +
+#   scale_colour_brewer(palette = "Set1", name = "Cell status")
+# 
+# plt2 <- base_plot + 
+#   geom_point(aes(colour = Substrate), size = 0.1) +
+#   scale_colour_brewer(palette = "Set2")
+# 
+# plt3 <- base_plot +
+#   geom_point(aes(colour = `Tissue state`), size = 0.1) +
+#   scale_colour_brewer(palette = "Dark2", name = "Tissue state")
+# 
+# plt4 <- base_plot +
+#   geom_point(aes(colour = `Digestion temperature`), size = 0.1) +
+#   scale_colour_brewer(palette = "Blues", name = "Digestion temperature")
+# 
+# 
+# plot_grid(
+#   plt1, plt2, plt3, plt4,
+#   nrow = 1
+# )
+# 
+# 
+# saveRDS(last_plot(),
+#         output_rds)
+
+# ggsave(output_png, width = 12, height = 4)
 

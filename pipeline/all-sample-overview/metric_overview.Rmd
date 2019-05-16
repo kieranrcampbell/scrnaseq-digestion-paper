@@ -8,7 +8,7 @@ output:
   html_notebook: default
 params:
   cellranger_version: v3
-  input_umap_rds: input.rds
+  umap_csv: '../../data/all-sample-overview/umap_df-v3.csv'
   output_figure: output.png
   pct_mito_fig: mito_fig.png
   stats_file: output.csv
@@ -27,6 +27,7 @@ suppressPackageStartupMessages({
   library(broom)
   library(glue)
   library(here)
+  library(cowplot)
 })
 
 # Columns of rowData(sce) that need removed to merge
@@ -73,7 +74,9 @@ read_and_get_coldata <- function(path) {
 And read:
 
 ```{r}
-coldata_all <- map_df(all_raw, read_and_get_coldata)
+suppressMessages({
+  coldata_all <- map_df(all_raw, read_and_get_coldata)
+})
 
 coldata_all <- filter(coldata_all, enzyme_mix != "MACS_mix")
 ```
@@ -206,22 +209,104 @@ cowplot::plot_grid(grid_plot, ridge_plot,
 # ggsave("../../figs/all_sample_analyses/all_sample_overview-noumap.png", width = 10, height = 8)
 ```
 
-```{r}
-source("scripts/fix_plot_allen.R")
 
-umap_plot <- readRDS(params$input_umap_rds)
+# Make the UMAP plot
+
+```{r}
+
+```
+
+
+```{r}
+suppressMessages({
+  um_df <- read_csv(params$umap_csv)
+})
+
+sample_type_cols <- c(
+  "Cell line"="#1d3554",
+  "Patient"="#42858C",
+  "PDX"="#570D32"
+)
+
+digestion_temp_colours <- c(
+  "42"="#b01111",
+  "37"="#b4451f",
+  "24"="#dd9f40",
+  "6"="#62a1db"
+)
+
+
+
+# Ok we need to tidy up um_df before proceeding
+
+um_df <- rename(um_df,
+                `Cancer type` = cancer_type,
+                Substrate = sample_type,
+                `Digestion temperature` = digestion_temperature,
+                `Tissue state` = tissue_state,
+                `Cell status` = cell_status)
+
+um_df <- mutate(um_df,
+                `Cell status` = stringr::str_to_title(`Cell status`),
+                `Tissue state` = case_when(
+                  `Tissue state` == 'digested_fresh' ~ "Fresh",
+                  `Tissue state` == "frozen" ~ "Frozen",
+                  TRUE ~ "Fresh"
+                ),
+                `Digestion temperature` = as.factor(`Digestion temperature`)
+)
+
+base_plot <- ggplot(um_df, aes(x = V1, y = V2)) +
+  labs(x = "UMAP1", y = "UMAP2") +
+  labs(x = "UMAP1", y = "UMAP2") +
+  cowplot::theme_cowplot(font_size = 7) +
+  theme(legend.position = "top") +
+  guides(colour = guide_legend(override.aes = list(size=2,alpha=1))) 
+plt1 <- base_plot +
+  geom_point(aes(colour = `Cell status`), size = 0.1, alpha = 0.3) +
+  scale_colour_brewer(palette = "Set1", name = "Cell status")
+
+plt2 <- base_plot +
+  geom_point(aes(colour = Substrate), size = 0.1, alpha = 0.3) +
+  scale_colour_brewer(palette = "Set2")
+
+plt3 <- base_plot +
+  geom_point(aes(colour = `Tissue state`), size = 0.1, alpha = 0.3) +
+  scale_colour_brewer(palette = "Dark2", name = "Tissue state")
+
+plt4 <- base_plot +
+  geom_point(aes(colour = `Digestion temperature`), size = 0.1, alpha = 0.3) +
+  scale_colour_manual(values = digestion_temp_colours, name = "Digestion temperature")
+
+
+umap_plot <- plot_grid(
+  plt1, plt2, plt3, plt4,
+  nrow = 1
+)
+```
+
+
+
+
+# Make the overall plot
+
+
+
+```{r}
+source(here("scripts/fix_plot_allen.R"))
 
 upper_grid <- make_upper_grid(grid_plot, ridge_plot)
 
 
 
-full_plot <- cowplot::plot_grid(upper_grid,
+full_plot <- cowplot::plot_grid(NULL,
+                                upper_grid,
                    cowplot::plot_grid(umap_plot, NULL, rel_widths = c(1, 0.02)),
-                   rel_heights = c(2,1.2),
-                   nrow = 2, #axis = 't', align = 'hv',
-                   labels = c("", "D"))
+                   rel_heights = c(1.3, 2,1.2),
+                   ncol = 1, #axis = 't', align = 'hv',
+                   labels = c("A", "", "D"))
 
-ggsave(params$output_figure, plot = full_plot, width = 10, height = 8.5)
+ggsave(params$output_figure, plot = full_plot, width = 10, height = 12)
 ```
 
 
