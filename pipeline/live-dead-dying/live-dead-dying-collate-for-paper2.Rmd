@@ -9,6 +9,14 @@ output:
 params:
   cellranger_version: v3
   output_rds: 'output.rds'
+  output_png: 'output.png'
+  intermediate_rds: '../../data/live-dead-dying/ldd-intermediate-results-v3.rds'
+  lowmito_rds: '../../data/live-dead-dying/ldd-lowmito-de-v3.rds'
+  cluster_rds: '../../data/live-dead-dying/ldd-cluster-de-v3.rds'
+  output_stats: 'todo'
+  cell_status_de: 'cs_de.csv'
+  cluster_de_results: 'output.csv'
+  lowmito_de_results: 'output.csv'
 ---
 
 ```{r setup, include=FALSE}
@@ -29,45 +37,237 @@ select <- dplyr::select
 mutate <- dplyr::mutate
 arrange <- dplyr::arrange
 rename <- dplyr::rename
+
+source(here('scripts/utils.R'))
 ```
 
-```{r}
-  consistent_theme <- function() {
-    theme(
-      axis.text = element_text(size = 9, colour = 'black'),
-      axis.title = element_text(size = 10, colour = 'black'),
-      legend.title = element_text(size = 10, colour = 'black'),
-      legend.text = element_text(size = 9, colour = 'black'),
-      strip.background = element_rect(fill = 'white'),
-      strip.text = element_text(face = 'bold', size = 10)
-    )
-  } 
-```
 
 Load previous results
 
 ```{r}
-intermediate_results <- readRDS(here("data/live-dead-dying/ldd-intermediate-results-v3.rds"))
-lowmito_de <- readRDS(here("data/live-dead-dying/ldd-lowmito-de-v3.rds"))
-cluster_de <- readRDS(here("data/live-dead-dying/ldd-cluster-de-v3.rds"))
+intermediate_results <- readRDS(params$intermediate_rds)
+lowmito_de <- readRDS(params$lowmito_rds)
+cluster_de <- readRDS(params$cluster_rds)
 ```
 
 
+
+Volcano plot of within low mito:
+
+```{r fig.height=6, fig.width=6}
+df_lm <- lowmito_de$tt %>% 
+  rownames_to_column('ensembl_gene_id') %>% 
+  as_tibble()
+
+df_lm$symbol <- sapply(strsplit(df_lm$ensembl_gene_id, "_"), `[`, 1)
+
+# genes_to_plot <- with(df_lm, (FDR == 0 & logFC > 1.5) | logFC == min(logFC) | logFC > 2.4)
+genes_to_plot <- with(df_lm, abs(logFC) > 1.2)
+
+df_ann <- filter(df_lm, genes_to_plot)
+
+ggplot(df_lm, aes(x = logFC, y = -log10(FDR))) +
+  geom_point(aes(colour = logFC), alpha = 0.4, size = 1) +
+  geom_label_repel(data = df_ann, aes(label = symbol), size = 3) +
+  scale_colour_gradient2(breaks = c(-1, 0, 1, 2),
+                         limits = c(-.7, .7), oob = scales::squish) +
+  theme(legend.position = "none") +
+  consistent_theme() +
+  labs(x = "log FC, live vs. dead", y = expression(-log[10]~"(FDR)"),
+       subtitle = "Cluster 1 cells < 10% mitochondrial transcripts only") +
+  theme(plot.subtitle = element_text(size = 11))
+
+dead_volcano <- last_plot()
+``` 
+
+
 ```{r}
-sce_filt <- sce[rowSums(as.matrix(counts(sce))) > 10, ]
+df_21 <- cluster_de$tt_2vs1 %>% 
+  rownames_to_column('ensembl_gene_id') %>% 
+  as_tibble()
+
+df_21$symbol <- sapply(strsplit(df_21$ensembl_gene_id, "_"), `[`, 1)
+
+ggplot(df_21, aes(x = logFC, y = -log10(FDR))) +
+  geom_point()
 ```
 
-Quick QQ plot
+
+
+
 
 ```{r}
-df_qq <- tibble(
-  lowmito = lowmito_de$tt$logFC,
-  cluster = cluster_de$tt_2vs1$logFC
+quantiles <- seq(0.01,99.99,0.1) * 0.01
+quantiles_lowmito <- quantile(abs(df_lm$logFC), quantiles) #df_21$logFC)
+quantiles_cluster <- quantile(abs(df_21$logFC), quantiles) #)
+
+tibble(lowmito = quantiles_lowmito, cluster = quantiles_cluster) %>% 
+  ggplot(aes(x = lowmito, y = cluster)) +
+  geom_point(alpha = 0.3) +
+  geom_abline(slope = 1, intercept = 0, colour = 'darkred', linetype = 2) +
+  labs(x = "logFC quantiles, within cluster 1", y = "logFC quantiles, between clusters 1 & 2") +
+  consistent_theme()
+
+qqp <- last_plot()
+```
+
+
+
+
+# Put together final plot
+
+```{r}
+plots <- intermediate_results$plots
+pca_by_cell_status <- plots[[1]]
+pca_by_mito <- plots[[2]]
+mito_by_cell_status <- plots[[3]]
+pca_by_cluster <- plots[[4]] 
+cluster_by_cell_status <- plots[[5]] 
+mito_by_cluster <- plots[[6]]
+hla_plot <- plots[[7]]
+
+pca_by_cell_status$layers[[1]]$aes_params$colour <- "grey90"
+pca_by_cell_status$layers[[1]]$aes_params$alpha <- 0.4
+pca_by_cell_status$layers[[2]]$aes_params$alpha <- 0.4
+
+pca_by_mito$layers[[1]]$aes_params$alpha <- 0.6
+
+pca_by_mito <- pca_by_mito +
+  viridis::scale_color_viridis(name = '% transcriptome\nmitochondrial') +
+  theme(legend.title = element_text(size = 9),
+        legend.key.size = unit(0.4, "cm"))
+
+
+upper_grid <- with(intermediate_results, plot_grid(
+  NULL, 
+  pca_by_cell_status + theme(strip.text = element_text(margin = margin(b=5))),
+  pca_by_mito,
+  nrow = 1,
+  labels = c('A', 'B', 'C'),
+  rel_widths = c(1.2,2,0.8)
+)
 )
 
-abline(0, 1, col='red')
+middle_grid <- with(intermediate_results, plot_grid(
+  mito_by_cell_status + ylab("% transcriptome mitochondrial"), 
+  pca_by_cluster,
+  cluster_by_cell_status,
+  mito_by_cluster + ylab("% transcriptome mitochondrial"),
+  rel_widths = c(0.7, 1.2, 1, 0.7),
+  labels = c("D", "E", "F", "G"),
+  nrow = 1
+))
+
+bottom_grid <- with(intermediate_results, plot_grid(
+  hla_plot,
+  dead_volcano,
+  qqp,
+  nrow = 1,
+  rel_widths = c(1, 1.5, 1),
+  labels = c("H", "I", "J")
+))
+```
+
+```{r}
+full_plot <- plot_grid(
+  upper_grid,
+  middle_grid,
+  bottom_grid,
+  ncol = 1,
+  rel_heights = c(1, 1, 1.2)
+)
+
+ggsave(plot = full_plot, params$output_png, width = 12, height = 10.2)
 ```
 
 
+# Collate statistics
 
+```{r}
+stats <- list()
+
+cell_tbl <- table(intermediate_results$cdata$cell_status)
+stats$n_dead_cells <- cell_tbl['Dead']
+stats$n_dying_cells <- cell_tbl['Dying']
+stats$n_live_cells <- cell_tbl['Live']
+```
+
+Mitochondrial stats by cell status:
+
+```{r}
+df_pct_mito <- group_by(intermediate_results$cdata, cell_status) %>% 
+  summarise(median_pct_mito = median(pct_counts_mito))
+
+for(i in seq_len(nrow(df_pct_mito))) {
+  d <- df_pct_mito[i,]
+  stats[[paste0("pct_mito_cell_status", d$cell_status)]] <- signif(d$median_pct_mito, 3)
+}
+```
+
+
+T-test on mitochondrial by cell status
+
+```{r}
+stats$t_test_dead_vs_live <- filter(intermediate_results$cdata, cell_status %in% c("Dead", "Live")) %>% 
+  t.test(pct_counts_mito ~ cell_status, data = .) %>% 
+  .$p.value %>% 
+  signif(3)
+
+stats$t_test_dead_vs_dying <- filter(intermediate_results$cdata, cell_status %in% c("Dead", "Dying")) %>% 
+  t.test(pct_counts_mito ~ cell_status, data = .) %>% 
+  .$p.value %>% 
+  signif(3)
+```
+
+cluster composition statistics:
+
+```{r}
+cell_props <- group_by(intermediate_results$cdata, cluster) %>% 
+  count(cell_status) %>% 
+  mutate(p = n / sum(n)) %>% ungroup()
+
+for(i in seq_len(nrow(cell_props))) {
+  d <- cell_props[i,]
+  description <- glue("cell_pct_{d$cluster}_status_{d$cell_status}")
+  stat <- signif(100*d$p, 2)
+  stats[[description]] <- stat
+}
+```
+
+
+```{r}
+df_pct_mito <- group_by(intermediate_results$cdata, cluster) %>% 
+  summarise(median_pct_mito = median(pct_counts_mito))
+
+for(i in seq_len(nrow(df_pct_mito))) {
+  d <- df_pct_mito[i,]
+  stats[[paste0("pct_mito_cluster", d$cluster)]] <- signif(d$median_pct_mito, 3)
+}
+```
+
+
+T-test on mitochondrial by cell status
+
+```{r}
+stats$t_test_2_vs_1 <- filter(intermediate_results$cdata, cluster %in% c("1", "2")) %>% 
+  t.test(pct_counts_mito ~ cluster, data = .) %>% 
+  .$p.value %>% 
+  signif(3)
+
+stats$t_test_3_vs_2 <- filter(intermediate_results$cdata, cluster %in% c("2", "3")) %>% 
+  t.test(pct_counts_mito ~ cluster, data = .) %>% 
+  .$p.value %>% 
+  signif(3)
+```
+
+And write all stats:
+
+```{r}
+# And write the stats
+config <- get_config()
+
+df_stat <- tibble(description = names(stats),
+                  statistic = unlist(stats))
+write_statistics(df_stat, file = params$output_stats)
+```
 

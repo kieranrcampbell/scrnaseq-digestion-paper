@@ -22,12 +22,21 @@ do_de <- function(input_rds = "data/live-dead-dying/ldd_sce.rds",
   results <- readRDS(input_rds)
   sce <- results$sce
   
-  sce_low_m <- sce[, sce$pct_counts_mito < 10 & sce$cell_status %in% c("live", "dead") & sce$cluster == "1"]
+  sce_low_m <- sce[, sce$pct_counts_mito < 10 & 
+                     sce$pct_counts_mito > 1 &
+                     sce$total_features_by_counts > 1000 &
+                     sce$cell_status %in% c("live", "dead") & 
+                     sce$cluster == "1"]
+  
+  sce_low_m <- computeSumFactors(sce_low_m)
   
   
   
   counts_per_gene <- rowSums(as.matrix(counts(sce_low_m)))
-  for_de <- counts_per_gene > 10
+  cells_expressing <- rowSums(as.matrix(counts(sce_low_m)) > 0)
+  
+  for_de <- counts_per_gene > 100 & cells_expressing > 100
+  
   
   sce_de <- sce_low_m[for_de,]
   

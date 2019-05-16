@@ -22,12 +22,16 @@ do_de <- function(input_rds = "data/live-dead-dying/ldd_sce.rds",
   results <- readRDS(input_rds)
   sce <- results$sce
   
+  sce <- computeSumFactors(sce, clusters = sce$cluster)
+  
   
   stopifnot("cluster" %in% names(colData(sce)))
   
   
   counts_per_gene <- rowSums(as.matrix(counts(sce)))
-  for_de <- counts_per_gene > 10
+  cells_expressing <- rowSums(as.matrix(counts(sce)) > 0)
+  
+  for_de <- counts_per_gene > 100 & cells_expressing > 100
   
   sce_de <- sce[for_de,]
   
