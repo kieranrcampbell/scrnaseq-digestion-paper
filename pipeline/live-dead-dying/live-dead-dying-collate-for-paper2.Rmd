@@ -8,13 +8,11 @@ output:
   html_notebook: default
 params:
   cellranger_version: v3
-  output_rds: 'output.rds'
   output_png: 'output.png'
   intermediate_rds: '../../data/live-dead-dying/ldd-intermediate-results-v3.rds'
   lowmito_rds: '../../data/live-dead-dying/ldd-lowmito-de-v3.rds'
   cluster_rds: '../../data/live-dead-dying/ldd-cluster-de-v3.rds'
   output_stats: 'todo'
-  cell_status_de: 'cs_de.csv'
   cluster_de_results: 'output.csv'
   lowmito_de_results: 'output.csv'
 ---
@@ -269,5 +267,30 @@ config <- get_config()
 df_stat <- tibble(description = names(stats),
                   statistic = unlist(stats))
 write_statistics(df_stat, file = params$output_stats)
+```
+
+Save differential expression outputs:
+
+```{r}
+lowmito_de$tt %>% 
+  as.data.frame() %>% 
+  write_csv(params$lowmito_de_results)
+
+```
+
+
+cluster results:
+
+```{r}
+tts <- cluster_de[grepl('tt', names(cluster_de))]
+
+tts <- lapply(tts, as.data.frame)
+
+for(n in names(tts)) {
+  tts[[n]]$cluster_comparison <- gsub("tt_", "", n)
+}
+
+bind_rows(tts) %>% 
+  write_csv(params$cluster_de_results)
 ```
 

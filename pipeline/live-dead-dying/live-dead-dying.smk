@@ -1,9 +1,4 @@
 
-# all_figs['live-dead-dying'] = expand("figs/live-dead-dying/ldd_{cv}.png",
-#                                      cv=cellranger_versions)
-
-# deliverables['live-dead-dying-de-results'] = expand("data/deliverables/live_dead_dying_de-{cv}.csv",
-#                                                     cv=cellranger_versions)
 
 
 
@@ -48,6 +43,36 @@ rule lowmito_de:
     shell:
         "Rscript pipeline/live-dead-dying/low-mito-de.R \
         --input_rds {input} --output_rds {output}"
+
+all_figs['live-dead-dying'] = expand("figs/live-dead-dying/ldd_{cv}.png",
+                                     cv=cellranger_versions)
+
+deliverables['live-dead-dying-de-results'] = ['data/deliverables/ldd-cluster-de-v3.csv','data/deliverables/ldd-lowmito-de-v3.csv']
+
+rule collate_analysis:
+    params:
+        curr_dir=os.getcwd()
+    input:
+        cluster_de='data/live-dead-dying/ldd-cluster-de-{cv}.rds',
+        lowmito_de='data/live-dead-dying/ldd-lowmito-de-{cv}.rds',
+        intermediate_rds='data/live-dead-dying/ldd-intermediate-results-{cv}.rds'
+    output:
+        png='figs/live-dead-dying/ldd_{cv}.png',
+        stats='data/statistics/live_dead_dying_{cv}.csv',
+        cluster_de_results='data/deliverables/ldd-cluster-de-{cv}.csv',
+        lowmito_de_results='data/deliverables/ldd-lowmito-de-{cv}.csv'
+    shell:
+        "Rscript -e \"rmarkdown::render('{params.curr_dir}/pipeline/live-dead-dying/live-dead-dying-collate-for-paper2.Rmd', \
+        knit_root_dir='{params.curr_dir}', \
+        params=list(cellranger_version='{wildcards.cv}', \
+        output_png='{output.png}',\
+        intermediate_rds='{input.intermediate_rds}',\
+        lowmito_rds='{input.lowmito_de}',\
+        cluster_rds='{input.cluster_de}',\
+        output_stats='{output.stats}',\
+        cluster_de_results='{output.cluster_de_results}',\
+        lowmito_de_results='{output.lowmito_de_results}'))\" "
+
 
         
 # rule collate_analysis:
