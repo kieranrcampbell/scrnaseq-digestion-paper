@@ -14,9 +14,10 @@ params:
   grid_plot: grid.png
   pathway_plot: "figs/deleteme.png"
   output_fig: "figs/deleteme.png"
-  sfig_varresp: 'figs/deleteme.png'
+  sfig_varresp: '../../figs/deleteme.png'
   sfig_props: 'figs/deleteme.png'
   pt_umap: 'figs/all-sample-overview/primary-tumour-figs.rds'
+  coregeneset_csv: 'coregeneset.csv'
 ---
 
 
@@ -30,6 +31,7 @@ suppressPackageStartupMessages({
   library(ggrepel)
   library(here)
   library(biomaRt)
+  library(cowplot)
 })
 
 select <- dplyr::select
@@ -54,8 +56,7 @@ df <- lapply(results, `[[`, 'edger_results') %>%
 
 
 ```{r}
-pdx_results <- readRDS(params$pdx_results)
-df_pdx <- pdx_results$edger_results
+coregeneset_df <- read_csv(params$coregeneset_csv)
 ```
 
 
@@ -87,14 +88,11 @@ ggsave(params$volcano_plot, width = 15, height = 6)
 
 Construct core gene set
 
-```{r}
-coregene_df <- filter(df_pdx, FDR < 0.05, logFC > log2(1.5))
-```
 
 Let's take the top 40 genes
 
 ```{r}
-coregenes <- top_n(coregene_df, 40, abs(logFC)) %>% .$ensembl_gene_id
+coregenes <- top_n(coregeneset_df, 40, abs(logFC)) %>% .$ensembl_gene_id
 ```
 
 
@@ -222,14 +220,27 @@ dfs <- filter(dfs, !(cell_type %in% c("B cells", "Plasma cells", "other")))
 dfv <- group_by(dfs, ensembl_gene_id) %>% 
   summarise(var_logFC = var(logFC))
 
+dfs <- mutate(dfs,
+                cell_type = case_when(
+                  cell_type == "Breast cancer cells" ~ "Epithelial cells",
+                  cell_type == "Monocyte_Macrophage" ~ "Monocyte/Macrophage",
+                  TRUE ~ cell_type
+                ))
+
 top_n(dfv, 20, var_logFC) %>% 
   inner_join(dfs) %>% 
   ggplot(aes(x = cell_type, y = logFC)) +
   facet_wrap(~ hgnc_symbol, scales = "free_x") +
   geom_bar(stat = 'identity') +
   coord_flip() +
-  consistent_theme()
+  consistent_theme() +
+  labs(x = "Cell type", y = "log fold change, 37C collagenase vs 6C cold protease")
 ```
+
+```{r}
+ggsave(params$sfig_varresp, width = 10, height = 8)
+```
+
 
 # Save figures
 
@@ -248,4 +259,15 @@ main_plot <- plot_grid(plot_grid(NULL, NULL, nrow = 1, labels = c("A", "B")),
 ggsave(here(params$output_fig), width = 13, height = 15)
 ```
 
+Save supplementary UMAP figure
+
+```{r}
+umap_figs$prop_plot +
+  cowplot::theme_cowplot(font_size = 11) +
+  consistent_theme() +
+    theme(axis.text.x = element_text(size = 7, angle=-90, hjust=0, vjust=0.5),
+          strip.text = element_text(size = 9, face='bold'))
+
+ggsave(params$sfig_props, width = 13, height = 4)
+```
 

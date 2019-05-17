@@ -49,7 +49,7 @@ rule overview:
         pct_mito_fig='{output.pct_mito_fig}'))\" "
 
 
-rule primary_tumour_fig:
+rule initial_primary_tumour_umap_prop:
     input:
         "data/primary_tumour_analysis/v6/sce_final_annotated/v3.rds"
     output:

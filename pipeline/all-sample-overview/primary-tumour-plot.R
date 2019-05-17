@@ -32,7 +32,7 @@ make_fig <- function(input_sce = "input_sce",
                   patient_id = case_when(
                     patient_id == "VOA11019" ~ "SA1203SA",
                     patient_id == "VOA11267" ~ "SA1206",
-                    patient_id == "VOA12024" ~ "SA2010",
+                    patient_id == "VOA12024" ~ "SA1210",
                     patient_id == "PBC04106" ~ "SA1205",
                     patient_id == "PBC04633" ~ "SA1208",
                     patient_id == "PBC04573" ~ "SA1207"

@@ -35,8 +35,7 @@ all_figs['primary-tumour-de'] = expand("figs/differential-expression/primary_tum
                                        pb=pseudobulk)
 
 
-all_figs['primary-tumour-supp'] = ['figs/differential-expression/pt-var-response_v3_FALSE.png',
-        'figs/differential-expression/pt-var-response_v3_FALSE.png']
+all_figs['primary-tumour-supp'] = ['figs/differential-expression/pt-var-response_v3_FALSE.png', 'figs/differential-expression/pt-props_v3_FALSE.png']
 
 
 deliverables['coregene-df'] = ['data/deliverables/coregene_df-FALSE-v3.csv']
@@ -152,15 +151,15 @@ rule primary_tumour_de:
         pseudobulk='{wildcards.pb}',\
         output_rds='{output.rds}'))\" "    
 
-rule primary_tumour_figs:
+rule final_primary_tumour_differential_expression_figs:
     params:
         curr_dir=os.getcwd()
     input:
         rds=expand("data/primary_tumour_temp_de/{{cv}}/DE_results_{ct}_pseudobulk_{{pb}}.rds",
                     ct=cell_types),
         pdx_results="data/pdx_temp_de/{cv}/DE_results_pseudobulk_{pb}.rds",
-        pt_umap="figs/all-sample-overview/primary-tumour-figs.rds"
-
+        pt_umap="figs/all-sample-overview/primary-tumour-figs.rds",
+        coregeneset_csv="data/deliverables/coregene_df-{pb}-{cv}.csv"
     output:
         volcano="figs/primary-tumour-temp-de/volcano_{cv}_pseudobulk_{pb}.png",
         grid="figs/primary-tumour-temp-de/grid_{cv}_pseudobulk_{pb}.png",
@@ -176,6 +175,7 @@ rule primary_tumour_figs:
         params=list(cellranger_version='{wildcards.cv}', \
         volcano_plot='{output.volcano}',\
         grid_plot='{output.grid}',\
+        coregeneset_csv='{input.coregeneset_csv}',\
         sfig_varresp='{output.sfig_varresp}',\
         sfig_props='{output.sfig_props}',\
         pt_umap='{input.pt_umap}',\
