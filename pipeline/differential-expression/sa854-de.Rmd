@@ -1,0 +1,165 @@
+---
+title: "SA854 temperature differential expression"
+author: "Kieran R Campbell"
+output:
+  html_document: 
+    toc: true
+    toc_float: true
+  html_notebook: default
+params:
+  cellranger_version: v3
+  umap_csv: '../../data/all-sample-overview/umap_df-v3.csv'
+  output_figure: output.png
+  pct_mito_fig: mito_fig.png
+  stats_file: output.csv
+  coregene_df: '../../data/deliverables/coregene_df-FALSE-v3.csv'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      cache = FALSE)
+
+suppressPackageStartupMessages({
+  library(scater)
+  library(DropletUtils)
+  library(SingleCellExperiment)
+  library(tidyverse)
+  library(ggridges)
+  library(broom)
+  library(glue)
+  library(here)
+  library(scran)
+  library(cowplot)
+  library(edgeR)
+})
+
+# Columns of rowData(sce) that need removed to merge
+cols_to_remove <- c(
+  "mean_counts",
+  "log10_mean_counts",
+  "n_cells_by_counts",
+  "pct_dropout_by_counts",
+  "total_counts",
+  "log10_total_counts",
+  "n_cells_counts",
+  "pct_dropout_counts"
+)
+
+remove_cols <- function(sce) {
+  rowData(sce)[cols_to_remove] <- NULL
+  sce
+}
+
+source(here("scripts/utils.R"))
+```
+
+
+```{r}
+sce_files <- dir(here('data/scesets/v3/'), pattern = 'SA854*.*qc', full.names = TRUE)
+
+sces <- lapply(sce_files, readRDS)
+
+sces <- lapply(sces, remove_cols)
+```
+
+
+```{r}
+sce <- do.call('cbind', sces)
+
+sce <- runPCA(sce)
+```
+
+```{r}
+rv <- rowVars(as.matrix(logcounts(sce)))
+hv <- rv >= sort(rv, decreasing = TRUE)[500]
+```
+
+```{r}
+sces_hv <- lapply(sces, function(sce) sce[hv, ])
+
+mnn <- do.call('fastMNN', sces_hv)
+```
+
+```{r}
+reducedDim(sce, 'mnn') <- mnn$corrected
+
+sce$digestion_temperature <- factor(sce$digestion_temperature)
+
+plotReducedDim(sce, 'mnn', colour_by = 'digestion_temperature')
+```
+
+
+
+```{r}
+sce_de <- sce[rowSums(as.matrix(counts(sce))) > 10, ]
+
+## Let's subset for now to get the show on the road
+sce_de <- sce_de[, sample(ncol(sce_de), 200)]
+
+dge <- convertTo(sce_de, type = 'edgeR')
+
+design <- model.matrix(~ sce_de$digestion_temperature)
+  
+dge <- estimateDisp(dge, design = design)
+fit <- glmQLFit(dge, design = design)
+
+qlfs <- lapply(2:4, function(i) glmQLFTest(fit, coef = i))
+
+names(qlfs) <- paste0('qlf_', c(24, 37, 42))
+
+tts <- lapply(qlfs, topTags, n = Inf)
+```
+
+```{r}
+coregene_df <- read_csv(params$coregene_df)
+```
+
+
+```{r}
+tidy_tt <- function(tt) {
+  tt <- as.data.frame(tt)
+  tt <- rownames_to_column(tt, 'ensembl_gene_id')  
+  inner_join(tt, coregene_df, by = 'ensembl_gene_id',
+             suffix = c('_sa854', '_coregene')) %>% 
+    as_tibble()
+}
+
+df_tt <- lapply(tts, tidy_tt)
+```
+
+```{r}
+for(comp in names(df_tt)) {
+  df_tt[[ comp ]]$comparison <- comp
+}
+
+df <- bind_rows(df_tt)
+```
+
+```{r}
+ggplot(df, aes(x = logFC_coregene, y = logFC_sa854)) +
+  geom_point(aes(colour = comparison)) +
+  facet_wrap(~ comparison)
+```
+
+
+```{r}
+df_bar <- top_n(coregene_df, 40, logFC) %>% 
+  select(ensembl_gene_id) %>% 
+  inner_join(df)
+
+df_bar$comparison <- gsub("qlf_", "", df_bar$comparison)
+
+
+df_bar %>% 
+  ggplot(aes(x = comparison, y = logFC_sa854, fill = comparison)) +
+  geom_bar(stat = 'identity') +
+  facet_wrap(~ gene_symbol, scales = "free_y") +
+  consistent_theme() +
+  labs(x = "Temperature", y = "logFC at temperature vs 6C") +
+  scale_fill_manual(values = digestion_temp_colours()) +
+  theme(legend.position = 'none')
+```
+
+
+
+
