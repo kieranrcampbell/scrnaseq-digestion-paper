@@ -268,14 +268,14 @@ lowmito_table <- table(as.data.frame(lowmito_de$tt)$FDR < 0.05)
 
 stats$n_signif_lowmito <- lowmito_table[2]
 stats$lowmito_total <- sum(lowmito_table)
-stats$pct_signif_lowmito <- signif(lowmito_table[2] / sum(lowmito_table), 3)
+stats$pct_signif_lowmito <- signif(100 * lowmito_table[2] / sum(lowmito_table), 3)
 
 
 cluster21_table <- table(as.data.frame(cluster_de$tt_2vs1)$FDR < 0.05)
 
 stats$n_signif_cluster <- cluster21_table[2]
 stats$cluster_total <- sum(cluster21_table)
-stats$pct_signif_cluster <- signif(cluster21_table[2] / sum(cluster21_table), 3)
+stats$pct_signif_cluster <- signif(100 * cluster21_table[2] / sum(cluster21_table), 3)
 
 ```
 
