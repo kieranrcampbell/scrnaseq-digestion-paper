@@ -1,11 +1,10 @@
 
 # Primary tumour fig
-pt_fig = "figs/all-sample-overview/primary-tumour-cellprops.png"
+# pt_fig = "figs/all-sample-overview/primary-tumour-cellprops.png"
 
 # Final fig to be passed off
 all_figs['all-sample-overview'] = expand("figs/all-sample-overview/all_sample_overview-{cv}.png",
-                       cv=cellranger_versions) + \
-                       [pt_fig]
+                       cv=cellranger_versions)
 
 
 umap_fig_rds = expand("figs/all-sample-overview/umap_all_{cv}.rds",
@@ -54,7 +53,7 @@ rule primary_tumour_fig:
     input:
         "data/primary_tumour_analysis/v6/sce_final_annotated/v3.rds"
     output:
-        pt_fig
+        "figs/all-sample-overview/primary-tumour-figs.rds"
     shell:
         "Rscript pipeline/all-sample-overview/primary-tumour-plot.R \
         --input_sce {input} \

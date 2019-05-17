@@ -7,7 +7,7 @@ library(aargh)
 theme_set(theme_cowplot(font_size = 11))
 
 make_fig <- function(input_sce = "input_sce",
-                     output_fig = "output.png") {
+                     output_fig = "output.rds") {
   
   sce <- readRDS(input_sce)
   
@@ -101,7 +101,12 @@ make_fig <- function(input_sce = "input_sce",
             ncol = 1,
             rel_heights = c(1,2.1))
   
-  ggsave(output_fig, width = 9.8, height = 10.2)
+  output_plots <- list(
+    umap_plot = umap_plot,
+    prop_plot = prop_plot
+  )
+  
+  saveRDS(output_plots, output_fig)
 
 }
 

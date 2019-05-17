@@ -14,6 +14,9 @@ params:
   grid_plot: grid.png
   pathway_plot: "figs/deleteme.png"
   output_fig: "figs/deleteme.png"
+  sfig_varresp: 'figs/deleteme.png'
+  sfig_props: 'figs/deleteme.png'
+  pt_umap: 'figs/all-sample-overview/primary-tumour-figs.rds'
 ---
 
 
@@ -191,10 +194,8 @@ ggsave(params$pathway_plot, width = 7, height = 10)
 Final figure:
 
 ```{r}
-cowplot::plot_grid(de_grid, pathway_plot, nrow = 1, labels = 'AUTO',
+bottom_grid <- cowplot::plot_grid(de_grid, pathway_plot, nrow = 1, labels = c("D", "E"),
                    rel_widths = c(1.3, 1))
-
-ggsave(params$output_fig, width = 14, height = 5)
 ```
 
 
@@ -228,6 +229,23 @@ top_n(dfv, 20, var_logFC) %>%
   geom_bar(stat = 'identity') +
   coord_flip() +
   consistent_theme()
+```
+
+# Save figures
+
+```{r}
+umap_figs <- readRDS(here(params$pt_umap))
+```
+
+```{r}
+main_plot <- plot_grid(plot_grid(NULL, NULL, nrow = 1, labels = c("A", "B")), 
+           umap_figs$umap_plot ,#+ consistent_theme(),
+           bottom_grid,
+           ncol = 1,
+           labels = c("", "C", ""),
+            rel_heights = c(1.5,1.8, 1.5))
+
+ggsave(here(params$output_fig), width = 13, height = 15)
 ```
 
 

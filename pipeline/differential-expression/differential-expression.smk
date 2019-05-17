@@ -34,6 +34,11 @@ all_figs['primary-tumour-de'] = expand("figs/differential-expression/primary_tum
                                        cv=cellranger_versions,
                                        pb=pseudobulk)
 
+
+all_figs['primary-tumour-supp'] = ['figs/differential-expression/pt-var-response_v3_FALSE.png',
+        'figs/differential-expression/pt-var-response_v3_FALSE.png']
+
+
 deliverables['coregene-df'] = ['data/deliverables/coregene_df-FALSE-v3.csv']
 
 rule pdx_de:
@@ -154,13 +159,16 @@ rule primary_tumour_figs:
         rds=expand("data/primary_tumour_temp_de/{{cv}}/DE_results_{ct}_pseudobulk_{{pb}}.rds",
                     ct=cell_types),
         pdx_results="data/pdx_temp_de/{cv}/DE_results_pseudobulk_{pb}.rds",
+        pt_umap="figs/all-sample-overview/primary-tumour-figs.rds"
 
     output:
         volcano="figs/primary-tumour-temp-de/volcano_{cv}_pseudobulk_{pb}.png",
         grid="figs/primary-tumour-temp-de/grid_{cv}_pseudobulk_{pb}.png",
         pathway="figs/primary-tumour-temp-de/pathway_{cv}_pseudobulk_{pb}.png",
         report="reports/primary-tumour-temp-de/collated_report_{cv}_pseudobulk_{pb}.html",
-        fig="figs/differential-expression/primary_tumour_temp_de_{cv}_{pb}.png"
+        fig="figs/differential-expression/primary_tumour_temp_de_{cv}_{pb}.png",
+        sfig_varresp='figs/differential-expression/pt-var-response_{cv}_{pb}.png',
+        sfig_props='figs/differential-expression/pt-props_{cv}_{pb}.png'
     shell:
         "Rscript -e \"rmarkdown::render('pipeline/differential-expression/primary_tumour_results.Rmd', \
         output_file='{params.curr_dir}/{output.report}', \
@@ -168,6 +176,9 @@ rule primary_tumour_figs:
         params=list(cellranger_version='{wildcards.cv}', \
         volcano_plot='{output.volcano}',\
         grid_plot='{output.grid}',\
+        sfig_varresp='{output.sfig_varresp}',\
+        sfig_props='{output.sfig_props}',\
+        pt_umap='{input.pt_umap}',\
         pathway_plot='{output.pathway}',\
         output_fig='{output.fig}',\
         pdx_results='{input.pdx_results}',\
