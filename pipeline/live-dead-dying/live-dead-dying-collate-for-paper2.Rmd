@@ -250,16 +250,35 @@ for(i in seq_len(nrow(df_pct_mito))) {
 T-test on mitochondrial by cell status
 
 ```{r}
-stats$t_test_2_vs_1 <- filter(intermediate_results$cdata, cluster %in% c("1", "2")) %>% 
+stats$t_test_two_vs_one <- filter(intermediate_results$cdata, cluster %in% c("1", "2")) %>% 
   t.test(pct_counts_mito ~ cluster, data = .) %>% 
   .$p.value %>% 
   signif(3)
 
-stats$t_test_3_vs_2 <- filter(intermediate_results$cdata, cluster %in% c("2", "3")) %>% 
+stats$t_test_three_vs_two <- filter(intermediate_results$cdata, cluster %in% c("2", "3")) %>% 
   t.test(pct_counts_mito ~ cluster, data = .) %>% 
   .$p.value %>% 
   signif(3)
 ```
+
+How many genes are significant:
+
+```{r}
+lowmito_table <- table(as.data.frame(lowmito_de$tt)$FDR < 0.05)
+
+stats$n_signif_lowmito <- lowmito_table[2]
+stats$lowmito_total <- sum(lowmito_table)
+stats$pct_signif_lowmito <- signif(lowmito_table[2] / sum(lowmito_table), 3)
+
+
+cluster21_table <- table(as.data.frame(cluster_de$tt_2vs1)$FDR < 0.05)
+
+stats$n_signif_cluster <- cluster21_table[2]
+stats$cluster_total <- sum(cluster21_table)
+stats$pct_signif_cluster <- signif(cluster21_table[2] / sum(cluster21_table), 3)
+
+```
+
 
 And write all stats:
 
