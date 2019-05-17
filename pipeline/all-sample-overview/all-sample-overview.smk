@@ -58,3 +58,9 @@ rule initial_primary_tumour_umap_prop:
         "Rscript pipeline/all-sample-overview/primary-tumour-plot.R \
         --input_sce {input} \
         --output_fig {output}"
+
+rule primary_tumour_table_gen:
+    output:
+        config['ptfile']
+    shell:
+        "Rscript pipeline/all-sample-overview/gen-pt-table.R"

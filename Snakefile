@@ -47,7 +47,8 @@ rule all:
         list(itertools.chain(*all_figs.values())),
         list(itertools.chain(*deliverables.values())),
 	list(statistics.values()),
-	config['statfile']
+	config['statfile'],
+        config['ptfile']
 
 
 rule collate_stats:
