@@ -60,6 +60,54 @@ coregeneset_df <- read_csv(params$coregeneset_csv)
 ```
 
 
+
+
+# Comparison between PDX and primary tumour
+
+```{r}
+pdx_de <- readRDS(here("data/pdx_temp_de/v3/DE_results_pseudobulk_FALSE.rds"))
+```
+
+
+```{r}
+pdx_compare_df <- inner_join(
+  df,
+  pdx_de$edger_results,
+  by = "ensembl_gene_id",
+  suffix = c("_pt", "_pdx")
+)
+```
+
+Define annotation data frame
+
+```{r}
+n <- 5
+df_annot <- bind_rows(
+  group_by(pdx_compare_df, cell_type) %>% 
+    top_n(n, abs(logFC_pt)),
+  group_by(pdx_compare_df, cell_type) %>% 
+    top_n(n, abs(logFC_pdx))
+)
+```
+
+
+```{r fig.width = 7, fig.height = 5}
+theme_set(theme_cowplot(font_size = 11))
+
+ggplot(pdx_compare_df, aes(x = logFC_pdx, y = logFC_pt)) +
+  geom_point(aes(size = -log10(FDR_pt)), alpha = 0.3) +
+  facet_wrap(~ cell_type, scales = "free") +
+  geom_label_repel(data = df_annot, aes(label = gene_symbol_pt), size = 2) +
+  theme(strip.background = element_rect(fill = 'grey95')) +
+  labs(x = "logFC 37C vs 6C PDX",
+       y = "logFC 37C vs 6C Primary tumour") +
+  scale_colour_viridis_c()
+
+ggsave(here("figs/deleteme.png"), width = 8, height = 6)
+```
+
+
+
 # Volcano plots
 
 ```{r}

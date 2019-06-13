@@ -1,12 +1,18 @@
 
-library(SingleCellExperiment)
-library(tidyverse)
-library(cowplot)
-library(aargh)
+suppressPackageStartupMessages({
+  library(SingleCellExperiment)
+  library(tidyverse)
+  library(cowplot)
+  library(aargh)
+  library(here)
+})
+
+source(here("scripts/utils.R"))
 
 theme_set(theme_cowplot(font_size = 11))
 
 make_fig <- function(input_sce = "input_sce",
+                     stat_file = "stats.csv",
                      output_fig = "output.rds") {
   
   sce <- readRDS(input_sce)
@@ -107,6 +113,17 @@ make_fig <- function(input_sce = "input_sce",
   )
   
   saveRDS(output_plots, output_fig)
+  
+  ## Max and min cell stats
+  cell_tbl <- table(sce$id)
+
+  df_stat <- tribble(
+    ~ description, ~ statistic,
+    "min_pt_cells", min(cell_tbl),
+    "max_pt_cells", max(cell_tbl)
+  )
+  
+  write_statistics(df_stat, file = stat_file)
 
 }
 

@@ -53,11 +53,13 @@ rule initial_primary_tumour_umap_prop:
     input:
         "data/primary_tumour_analysis/v6/sce_final_annotated/v3.rds"
     output:
-        "figs/all-sample-overview/primary-tumour-figs.rds"
+        fig="figs/all-sample-overview/primary-tumour-figs.rds",
+        stats="data/statistics/primary_tumour_stats.csv"
     shell:
-        "Rscript pipeline/all-sample-overview/primary-tumour-plot.R \
-        --input_sce {input} \
-        --output_fig {output}"
+        "Rscript pipeline/all-sample-overview/primary-tumour-plot.R "
+        "--input_sce {input} "
+        "--output_fig {output.fig} "
+        "--stat_file {output.stats} "
 
 rule primary_tumour_table_gen:
     output:

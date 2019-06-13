@@ -8,7 +8,7 @@ output:
   html_notebook: default
 params:
   cellranger_version: v3
-  output_png: 'output.png'
+  output_png: '../../figs/output.png'
   intermediate_rds: '../../data/live-dead-dying/ldd-intermediate-results-v3.rds'
   lowmito_rds: '../../data/live-dead-dying/ldd-lowmito-de-v3.rds'
   cluster_rds: '../../data/live-dead-dying/ldd-cluster-de-v3.rds'
@@ -68,9 +68,10 @@ ggplot(df_lm, aes(x = logFC, y = -log10(FDR))) +
   geom_point(aes(colour = logFC), alpha = 0.4, size = 1) +
   geom_label_repel(data = df_ann, aes(label = symbol), size = 3) +
   scale_colour_gradient2(breaks = c(-1, 0, 1, 2),
-                         limits = c(-.7, .7), oob = scales::squish) +
+                         limits = c(-.7, .7), 
+                         oob = scales::squish) +
+  theme_paper() +
   theme(legend.position = "none") +
-  consistent_theme() +
   labs(x = "log FC, live vs. dead", y = expression(-log[10]~"(FDR)"),
        subtitle = "Cluster 1 cells < 10% mitochondrial transcripts only") +
   theme(plot.subtitle = element_text(size = 11))
@@ -103,8 +104,8 @@ tibble(lowmito = quantiles_lowmito, cluster = quantiles_cluster) %>%
   ggplot(aes(x = lowmito, y = cluster)) +
   geom_point(alpha = 0.3) +
   geom_abline(slope = 1, intercept = 0, colour = 'darkred', linetype = 2) +
-  labs(x = "logFC quantiles, within cluster 1", y = "logFC quantiles, between clusters 1 & 2") +
-  consistent_theme()
+  labs(x = "logFC quantiles within cluster 1", y = "logFC quantile\nbetween clusters 1 & 2") +
+  theme_paper()
 
 qqp <- last_plot()
 ```
@@ -116,13 +117,16 @@ qqp <- last_plot()
 
 ```{r}
 plots <- intermediate_results$plots
-pca_by_cell_status <- plots[[1]]
-pca_by_mito <- plots[[2]]
-mito_by_cell_status <- plots[[3]]
-pca_by_cluster <- plots[[4]] 
+
+plots <- lapply(plots, function(p) p + theme_paper())
+
+pca_by_cell_status <- plots[[1]] + theme(legend.position = "none")
+pca_by_mito <- plots[[2]] + theme(legend.position = "top")
+mito_by_cell_status <- plots[[3]] + theme(legend.position = "none")
+pca_by_cluster <- plots[[4]]  + theme(legend.position = "top")
 cluster_by_cell_status <- plots[[5]] 
-mito_by_cluster <- plots[[6]]
-hla_plot <- plots[[7]]
+mito_by_cluster <- plots[[6]] + theme(legend.position = "none")
+hla_plot <- plots[[7]] + theme(legend.position = "none") + ylim(0, 15) + ylab("Expression\n(log normalized counts)")
 
 pca_by_cell_status$layers[[1]]$aes_params$colour <- "grey90"
 pca_by_cell_status$layers[[1]]$aes_params$alpha <- 0.4
@@ -136,46 +140,54 @@ pca_by_mito <- pca_by_mito +
         legend.key.size = unit(0.4, "cm"))
 
 
-upper_grid <- with(intermediate_results, plot_grid(
+upper_grid <- plot_grid(
   NULL, 
   pca_by_cell_status + theme(strip.text = element_text(margin = margin(b=5))),
-  pca_by_mito,
   nrow = 1,
-  labels = c('A', 'B', 'C'),
-  rel_widths = c(1.2,2,0.8)
-)
+  labels = c('A', 'B'),
+  rel_widths = c(1,1.2)
 )
 
-middle_grid <- with(intermediate_results, plot_grid(
-  mito_by_cell_status + ylab("% transcriptome mitochondrial"), 
+middle_upper_grid <- plot_grid(
+  pca_by_mito,
+  mito_by_cell_status + ylab("% transcriptome\nmitochondrial"), 
   pca_by_cluster,
-  cluster_by_cell_status,
-  mito_by_cluster + ylab("% transcriptome mitochondrial"),
-  rel_widths = c(0.7, 1.2, 1, 0.7),
-  labels = c("D", "E", "F", "G"),
+  rel_widths = c(1, 0.7, 1),
+  labels = c("C", "D", "E"),
   nrow = 1
-))
+)
+
+middle_lower_grid <- plot_grid(
+    cluster_by_cell_status,
+    mito_by_cluster + ylab("% transcriptome\nmitochondrial"),
+    hla_plot,
+    nrow = 1,
+    rel_widths = c(1, 0.8, 1.1),
+    labels = c("F", "G", "H")
+)
 
 bottom_grid <- with(intermediate_results, plot_grid(
-  hla_plot,
+  NULL,
   dead_volcano,
   qqp,
+  NULL,
   nrow = 1,
-  rel_widths = c(1, 1.5, 1),
-  labels = c("H", "I", "J")
+  rel_widths = c(.2, 1.5, 1, .2),
+  labels = c("", "I", "J", "")
 ))
 ```
 
 ```{r}
 full_plot <- plot_grid(
   upper_grid,
-  middle_grid,
+  middle_upper_grid,
+  middle_lower_grid,
   bottom_grid,
   ncol = 1,
-  rel_heights = c(1, 1, 1.2)
+  rel_heights = c(1, 1, 1, 1.2)
 )
 
-ggsave(plot = full_plot, params$output_png, width = 12, height = 10.2)
+ggsave(plot = full_plot, params$output_png, width = 9, height = 11)
 ```
 
 

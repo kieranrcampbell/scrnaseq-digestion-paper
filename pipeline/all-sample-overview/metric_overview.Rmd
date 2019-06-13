@@ -9,7 +9,7 @@ output:
 params:
   cellranger_version: v3
   umap_csv: '../../data/all-sample-overview/umap_df-v3.csv'
-  output_figure: output.png
+  output_figure: "../../figs/deleteme.png"
   pct_mito_fig: mito_fig.png
   stats_file: output.csv
 ---
@@ -124,6 +124,10 @@ mito_ids <- group_by(coldata_all, id) %>%
   .$id
 ```
 
+```{r}
+
+```
+
 
 ```{r}
 coldata_all$id <- factor(coldata_all$id, levels = mito_ids)
@@ -133,7 +137,7 @@ coldata_all$sample_type <- gsub("_", " ", coldata_all$sample_type)
 coldata_all$sample_type <- stringr::str_to_title(coldata_all$sample_type)
 coldata_all$sample_type[coldata_all$sample_type == "Pdx"] <- "PDX"
 
-df_ridge <- select(coldata_all, id, `% mito` = pct_counts_mito, `# genes detected` = total_features_by_counts, total_counts) %>% 
+df_ridge <- select(coldata_all, id, `% mito content` = pct_counts_mito, `# genes detected` = total_features_by_counts, total_counts) %>% 
   mutate(`log10(# UMI)` = log10(total_counts)) %>% 
   select(-total_counts) %>% 
   gather(measure, value, -id)
@@ -142,14 +146,13 @@ ggplot(df_ridge, aes(x = value, y = id, group = id)) +
   geom_density_ridges(scale = 4, size = 0.25, alpha = 0.7) +
   facet_grid(~ measure, scales = "free_x") +
   labs(y = "Experiment") +
-  # ggsci::scale_fill_npg(name = "Sample type") +
   theme_ridges(grid = FALSE, font_size = 10, center_axis_labels = TRUE) +
+  theme_paper() +
   theme(axis.text.y = element_blank(),
-        axis.text.x = element_text(size = 8),
-        legend.position = "top") +
-  theme(axis.title.x = element_blank(),
-        strip.text = element_text(face = "bold"),
-        strip.background = element_rect(fill = "white", colour = "white"))
+        legend.position = "top",
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = -90, hjust = 0, vjust = .5))
+        
 
 ridge_plot <- last_plot()
 
@@ -180,10 +183,24 @@ df_grid$pheno_new <- factor(
   levels = c("Cell\nstatus", "Substrate", "Cancer\ntype", "Digestion\ntemperature", "Tissue\nstate" )
 )
 
+
+
 df_grid$value <- stringr::str_to_title(df_grid$value)
 df_grid$value <- gsub("_", "\n", df_grid$value)
 df_grid$value[df_grid$value == "Pdx"] <- "PDX"
 df_grid$value[df_grid$value == "Digested\nfresh" | df_grid$value == "None"] <- "Fresh"
+
+# this is so painful
+df_grid$value <- factor(
+  df_grid$value,
+  levels = c(
+    "Live", "Dying", "Dead",
+    "Cell Line", "Patient", "PDX",
+    "Breast", "Ovarian", "Lymphoid\ncell",
+    "6", "24", "37", "42",
+    "Fresh", "Frozen"
+  )
+)
 
 ggplot(df_grid, aes(x = value, y = id, fill = pheno_new)) +
   geom_point(size = 2, shape = 21, colour = 'grey20') +
@@ -191,11 +208,10 @@ ggplot(df_grid, aes(x = value, y = id, fill = pheno_new)) +
   scale_fill_brewer(palette = "Spectral", guide = F) +
   labs(y = "Dark2") +
   theme_bw() +
+  theme_paper() +
   theme(axis.title = element_blank(),
         axis.ticks.y = element_blank(),
         axis.text.y = element_blank(),
-        strip.text = element_text(face = "bold"),
-        strip.background = element_rect(fill = "white", colour = "white"),
         axis.text.x = element_text(angle = -90, hjust = 0, vjust = 0.5))
 
 grid_plot <- last_plot()
@@ -254,12 +270,15 @@ um_df <- mutate(um_df,
 base_plot <- ggplot(um_df, aes(x = V1, y = V2)) +
   labs(x = "UMAP1", y = "UMAP2") +
   labs(x = "UMAP1", y = "UMAP2") +
-  cowplot::theme_cowplot(font_size = 7) +
+  cowplot::theme_cowplot() +
+  theme_paper() +
   theme(legend.position = "top") +
-  guides(colour = guide_legend(override.aes = list(size=2,alpha=1))) 
+  guides(colour = guide_legend(override.aes = list(size=2,alpha=1),
+                               ncol = 2)) 
+  
 plt1 <- base_plot +
   geom_point(aes(colour = `Cell status`), size = 0.1, alpha = 0.3) +
-  scale_colour_brewer(palette = "Set1", name = "Cell status")
+  scale_colour_brewer(palette = "Set1", name = "Cell\nstatus")
 
 plt2 <- base_plot +
   geom_point(aes(colour = Substrate), size = 0.1, alpha = 0.3) +
@@ -267,11 +286,11 @@ plt2 <- base_plot +
 
 plt3 <- base_plot +
   geom_point(aes(colour = `Tissue state`), size = 0.1, alpha = 0.3) +
-  scale_colour_brewer(palette = "Dark2", name = "Tissue state")
+  scale_colour_brewer(palette = "Dark2", name = "Tissue\nstate")
 
 plt4 <- base_plot +
   geom_point(aes(colour = `Digestion temperature`), size = 0.1, alpha = 0.3) +
-  scale_colour_manual(values = digestion_temp_colours(), name = "Digestion temperature")
+  scale_colour_manual(values = digestion_temp_colours(), name = "Digestion\ntemperature")
 
 
 umap_plot <- plot_grid(

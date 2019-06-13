@@ -7,15 +7,18 @@ output:
     toc_float: true
   html_notebook: default
 params:
-  umap_csv: "../../figs/pdx_cl_temp_de/umap-pdx-cl.csv"
-  coregeneset_path: "../../figs/pdx_cl_temp_de/grid_v3_pseudobulk_FALSE.rds"
-  pathway_path: "../../figs/pdx_cl_temp_de/pathway_v3_pseudobulk_FALSE.rds"
-  fig_png: "../../figs/final/pdx_cl_temp_de_fig.png"
+  umap_csv: "../../figs/pdx_temp_de/umap-pdx-cl.csv"
+  coregeneset_path: "../../figs/pdx_temp_de/grid_v3_pseudobulk_FALSE.rds"
+  pathway_path: "../../figs/pdx_temp_de/pathway_v3_pseudobulk_FALSE.rds"
+  fig_png: "../../figs/deleteme.png"
   fig_rds: "../../figs/final/pdx_cl_temp_de_fig.rds"
 ---
 
 ```{r}
 library(tidyverse)
+library(here)
+
+source(here("scripts/utils.R"))
 ```
 
 ```{r}
@@ -33,7 +36,8 @@ temp_plot <- ggplot(df_umap, aes(x = UMAP1, y = UMAP2)) +
   geom_point(aes(colour = factor(digestion_method)), alpha = 0.5) +
   scale_colour_manual(values = cols, name = "Digestion\nmethod") +
   cowplot::theme_cowplot(font_size = 10) +
-  theme(legend.position = "right")
+  theme_paper() +
+  theme(legend.position = "right") 
 
 
 plot_gene <- function(gene, cutoff = 2) {
@@ -46,7 +50,8 @@ plot_gene <- function(gene, cutoff = 2) {
     geom_point(aes_string(colour = gene), alpha = 0.3, size = 1) +
     viridis::scale_colour_viridis(name = gene) +
     cowplot::theme_cowplot(font_size = 10) +
-    theme(legend.position = "right")
+    theme(legend.position = "right") +
+    theme_paper()
 }
 ```
 
@@ -65,6 +70,14 @@ umap_grid <- cowplot::plot_grid(
 coregeneset <- readRDS(params$coregeneset_path)
 pathway <- readRDS(params$pathway_path)
 ```
+
+```{r}
+coregeneset <- coregeneset + theme_paper()
+pathway <- pathway + theme_paper() +
+  theme(legend.position = c(0.4, 0.4),
+        legend.box.background = element_rect(colour = 'black', size = .2))
+```
+
 
 Overall plot:
 

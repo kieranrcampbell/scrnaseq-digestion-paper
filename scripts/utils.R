@@ -70,3 +70,14 @@ digestion_temp_colours <- function() {
   "6"="#62a1db"
   )
 }
+
+theme_paper <- function() {
+  cowplot::theme_cowplot(font_size = 11) +
+  theme(axis.text = element_text(size = 10, colour = "black"),
+        strip.text = element_text(face = "bold", size = 11),
+        strip.background = element_rect(fill = "white", colour = "white"),
+        axis.title = element_text(size = 11, colour = "black"),
+        legend.title = element_text(size = 11, colour = "black", face = "bold"),
+        legend.text = element_text(size = 10, colour = "black")
+  )
+}
