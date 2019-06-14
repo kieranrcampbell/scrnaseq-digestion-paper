@@ -3,6 +3,8 @@ import os
 import json
 import itertools
 
+singularity: "docker://kieranrcampbell/statgen2:0.4"
+
 configfile: "private_config.yaml"
 
 # Construct data frame of samples

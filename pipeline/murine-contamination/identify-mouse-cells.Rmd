@@ -4,7 +4,7 @@ author: "Kieran R Campbell"
 output:
   html_document
 params:
-  human_mouse_dir: 'data/human-mouse-sces/filtered_temperature_rdata_v3'
+  human_mouse_dir: '../../data/human-mouse-sces/filtered_temperature_rdata_v3'
   human_mouse_prop_file: 'output.csv'
 ---
 
@@ -20,11 +20,20 @@ suppressPackageStartupMessages({
   library(tidyverse)
   library(here)
   library(ggridges)
+  library(yaml)
 })
+
+source(here("scripts/utils.R"))
 
 filter <- dplyr::filter
 mutate <- dplyr::mutate
 ```
+
+```{r}
+config <- read_yaml(here("private_config.yaml"))
+sample_ids <- read_csv(config$sample_inventory_url)
+```
+
 
 ```{r}
 sces_filenames <- dir(params$human_mouse_dir)
@@ -81,6 +90,40 @@ dfs <- inner_join(df_human, df_mouse, by = c("Barcode", "sample_id"), suffix = c
 ```
 
 
+<!-- ## --- Playground -->
+
+<!-- ```{r} -->
+<!-- sce_used <- readRDS("../../data/scesets/v3/TENX021_SA854_002_sceset_v3_qc.rds") -->
+
+<!-- sce_human <- readRDS("../../data/human-mouse-sces/filtered_temperature_rdata_v3/human_TENX021_SA854_002.rdata") -->
+<!-- sce_mouse <- readRDS("../../data/human-mouse-sces/filtered_temperature_rdata_v3/mouse_TENX021_SA854_002.rdata") -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- sce_human <- calculateQCMetrics(sce_human) -->
+<!-- summary(sce_human$total_counts) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- cd1 <- as.data.frame(colData(sce_human)) %>% select(Barcode, total_counts) -->
+<!-- cd2 <- as.data.frame(colData(sce_used)) %>% select(Barcode, total_counts) -->
+
+<!-- cd <- inner_join(cd1, cd2, by = "Barcode")  -->
+<!-- ggplot(cd, aes(x = total_counts.x, y = total_counts.y)) + geom_point() -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- cd3 <- filter(dfs, grepl("854_002", sample_id)) %>%  -->
+<!--   select(Barcode, total_counts_human, total_counts_mouse) -->
+
+<!-- cd <- inner_join(cd, cd3, by = "Barcode") -->
+
+<!-- filter(cd, total_counts_human == 0) -->
+<!-- ``` -->
+
+
+<!-- ## --- end playground -->
+
 
 
 ```{r}
@@ -91,15 +134,24 @@ dfs <- replace_na(dfs, list(human = 0, mouse = 0)) %>%
                 diff_to_sum = diff / sum)
 ```
 
+
+```{r}
+dfs <- dplyr::select(sample_ids,
+              sample_id = id,
+              sample_type) %>% 
+  inner_join(dfs)
+```
+
+
+
 Let's add some annotation
 
 ```{r}
 dfs <- mutate(dfs,
               sample_type = case_when(
-                grepl("VOA|PBC", sample_id) ~ "Primary tumour",
-                grepl("SA928", sample_id) ~ "Cell line",
-                grepl("SA854", sample_id) ~ "Cell line",
-                grepl("_SA[5-9]", sample_id) ~ "PDX"
+                sample_type == "cell_line" ~ "Cell line",
+                sample_type == "patient" ~ "Patient",
+                TRUE ~ "PDX"
               ))
 ```
 
@@ -108,45 +160,59 @@ dfs <- mutate(dfs,
               is_mouse = diff_to_sum < 0)
 ```
 
-
-
-```{r fig.height = 8, fig.width = 5}
-filter(dfs, sum > 0) %>% 
-  mutate(sample_id = forcats::fct_reorder(sample_id, diff_to_sum)) %>% 
-  ggplot(aes(y = sample_id, x = diff_to_sum, group = sample_id)) + 
-  geom_density_ridges(stat = 'binline', scale = 5, bins = 40, rel_min_height = 0.0005) +
-  labs(x = "(human counts - mouse counts) / (human counts + mouse counts)", y = "Sample") +
-  facet_grid(sample_type ~ ., scales = "free_y", space = "free_y") +
-  theme_bw(base_size = 9) +
-  theme(axis.title.x = element_text(size = 8))
-
-ggsave(here("figs", "murine-contamination", "human_mouse_boxplot.png"), width = 5, height = 8)
+```{r}
+dfs <- filter(dfs, !is.na(diff_to_sum)) # remove poorly mapped cells from both
 ```
 
+
+Mapping between old and new:
 
 ```{r}
-filter(dfs, sample_type == "PDX") %>% 
-  ggplot(aes(x = diff_to_sum)) + 
-  geom_histogram() +
-  labs(x = "(human counts - mouse counts) / (human counts + mouse counts)", y = "# cells") +
-  facet_wrap(~ sample_id, scales = "free_y", ncol = 4) +
-  theme_bw(base_size = 8)
-
-ggsave(here("figs", "murine-contamination", "human_mouse_histogram_pdxonly.png"), width = 8, height = 5)
+mapping <-  c(
+"VOA11019"="SA1203SA",
+"VOA11267"="SA1206",
+"VOA12024"="SA1210",
+"PBC04106"="SA1205",
+"PBC04633"="SA1208",
+"PBC04573"="SA1207"
+  )
 ```
+
+```{r}
+for(m in names(mapping)) {
+  dfs$sample_id_fixed <- gsub(m, mapping[m], dfs$sample_id)
+}
+```
+
 
 
 ```{r, fig.height = 10, fig.width = 6}
-group_by(dfs, sample_id) %>% 
+dfs_grouped <- group_by(dfs, sample_id_fixed, sample_type) %>% 
   dplyr::summarise(pct_mouse = 100 * mean(diff_to_sum < 0, na.rm=TRUE)) %>% 
-  ggplot(aes(x = forcats::fct_reorder(sample_id, pct_mouse), y = pct_mouse)) +
+  ungroup()
+
+
+dfs_grouped %>% 
+  ggplot(aes(x = forcats::fct_reorder(sample_id_fixed, pct_mouse), y = pct_mouse)) +
   geom_bar(stat = 'identity') +
   coord_flip() +
   labs(y = "% of cells mouse", x = "Sample") +
-  theme_bw(base_size = 10)
+  theme_bw() +
+  theme_paper() +
+  theme(panel.grid.major = element_line(colour = "grey80")) +
+  facet_grid( sample_type ~ ., scales = "free_y", space = "free_y")
 
 ggsave(here("figs", "murine-contamination", "pct_cells_mouse.png"), width = 5, height = 8)
 ```
+
+```{r fig.width = 10, fig.height = 12}
+ggplot(dfs, aes(x = total_counts_human, y = total_counts_mouse, colour = is_mouse)) +
+         geom_point() +
+  facet_wrap(~ sample_id, ncol = 4) +
+  geom_abline(intercept = 0, slope = 1, colour = 'black')
+```
+
+
 
 ```{r}
 write_csv(dfs, params$human_mouse_prop_file)

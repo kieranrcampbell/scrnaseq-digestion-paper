@@ -92,6 +92,7 @@ sce$is_human <- sce$Barcode %in% sce_nomouse$Barcode
 ```
 
 
+
 ```{r}
 df_metrics <- as.data.frame(colData(sce)) %>% 
   dplyr::select(id, is_human, pct_counts_mito, total_features_by_counts, total_counts) %>% 
@@ -105,6 +106,28 @@ df_metrics <- df_metrics %>%
     is_human ~ "Human",
     !is_human ~ "Mouse"
   ))
+```
+
+
+
+```{r}
+mapping <-  c(
+"VOA11019"="SA1203SA",
+"VOA11267"="SA1206",
+"VOA12024"="SA1210",
+"PBC04106"="SA1205",
+"PBC04633"="SA1208",
+"PBC04573"="SA1207"
+  )
+```
+
+```{r}
+for(m in names(mapping)) {
+  df_metrics$id <- gsub(m, mapping[m], df_metrics$id)
+}
+```
+
+```{r}
 
  df_metrics %>% 
   ggplot(aes(x = id, fill = `Cell type`, y = value)) +

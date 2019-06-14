@@ -7,7 +7,7 @@ human_mouse_input_sces = expand(config['human_mouse_dir'] + "/{hm}_{id}.rdata",
 
 all_figs['murine-contamination'] = \
     expand('figs/murine-contamination/{p}.png',
-           p=['human_mouse_boxplot','human_mouse_histogram_pdxonly','pct_cells_mouse']) + \
+           p=['pct_cells_mouse']) + \
 	   ['figs/murine-contamination/murine-qc.png']
 
 
