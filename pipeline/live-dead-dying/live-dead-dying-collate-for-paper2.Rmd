@@ -308,6 +308,7 @@ Save differential expression outputs:
 ```{r}
 lowmito_de$tt %>% 
   as.data.frame() %>% 
+  rownames_to_column('ensembl_gene_id') %>% 
   write_csv(params$lowmito_de_results)
 
 ```
@@ -319,6 +320,8 @@ cluster results:
 tts <- cluster_de[grepl('tt', names(cluster_de))]
 
 tts <- lapply(tts, as.data.frame)
+
+tts <- lapply(tts, rownames_to_column, 'ensembl_gene_id')
 
 for(n in names(tts)) {
   tts[[n]]$cluster_comparison <- gsub("tt_", "", n)

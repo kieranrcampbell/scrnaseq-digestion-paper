@@ -17,7 +17,12 @@ params:
   sfig_varresp: '../../figs/deleteme.png'
   sfig_props: 'figs/deleteme.png'
   pt_umap: 'figs/all-sample-overview/primary-tumour-figs.rds'
-  coregeneset_csv: 'coregeneset.csv'
+  coregeneset_csv: '../../data/deliverables/coregene_df-FALSE-v3.csv'
+  latex_core_csv: '../../latex/pt-core.csv'
+  s_cor: '../../figs/deleteme.png'
+  s_pct_up: '../../figs/deleteme.png'
+  s_pct_up_signif: '../../figs/deleteme.png'
+  stats: 'output.stats'
 ---
 
 
@@ -32,9 +37,12 @@ suppressPackageStartupMessages({
   library(here)
   library(biomaRt)
   library(cowplot)
+  library(xtable)
 })
 
 select <- dplyr::select
+
+stats <- list()
 
 source(here('scripts/utils.R'))
 ```
@@ -77,6 +85,128 @@ pdx_compare_df <- inner_join(
   suffix = c("_pt", "_pdx")
 )
 ```
+
+```{r}
+  pdx_compare_df <- mutate(pdx_compare_df,
+                  cell_type = case_when(
+                    cell_type == "Breast cancer cells" ~ "Breast epithelial cells",
+                    cell_type == "Epithelial cells" ~ "Ovarian epithelial cells",
+                    cell_type == "Monocyte_Macrophage" ~ "Monocyte/Macrophage",
+                    TRUE ~ cell_type
+                  ))
+```
+
+
+New plot (Jun 14)
+
+Get correlations
+
+```{r fig.width = 6, fig.height = 3}
+df_cors <- group_by(pdx_compare_df, cell_type) %>% 
+  summarise(logfc_cor = cor(logFC_pt, logFC_pdx, method = "spearman"))
+
+ggplot(df_cors, aes(x = forcats::fct_reorder(cell_type, logfc_cor), y = logfc_cor))+
+  geom_bar(stat = 'identity') +
+  coord_flip() +
+  theme_paper() +
+  labs(x = "Cell type", y = "Spearman correlation, logFC cell type vs PDX epithelial")
+
+ggsave(params$s_cor, width = 6, height = 3)
+```
+
+
+```{r}
+top_pdx_gene <- top_n(pdx_compare_df, 40, logFC_pdx) %>% .$ensembl_gene_id
+pdx_compare_df <- mutate(pdx_compare_df, is_top_pdx_gene = ensembl_gene_id %in% coregeneset_df$ensembl_gene_id)
+```
+
+```{r}
+df_rplot <- group_by(pdx_compare_df, cell_type) %>% 
+  #mutate(logFC_rank = rank(logFC_pt)) %>% 
+  top_n(40, logFC_pt) %>% 
+  ungroup()
+
+make_plot <- function(ct) {
+  df <- filter(df_rplot, cell_type == ct)
+  symbol_is_na <- is.na(df$gene_symbol_pt)
+  df$gene_symbol_pt[symbol_is_na] <- df$ensembl_gene_id[symbol_is_na]
+  
+  ggplot(df,aes(x = logFC_pt, y = forcats::fct_reorder(gene_symbol_pt, logFC_pt),
+               colour = is_top_pdx_gene)) +
+    geom_point() + 
+    theme_paper() +
+    labs(x = "logFC in primary tumour", y = "Gene", subtitle = ct) +
+    theme(legend.position = "none",
+          axis.text.y = element_text(size = 6)) +
+    scale_colour_manual(values = c("FALSE"="black", "TRUE"="red"))
+}
+
+plotlist <- lapply(unique(df_rplot$cell_type), make_plot)
+
+plot_grid(plotlist = plotlist)
+
+# ggsave("../../figs/deleteme.png", width = 10, height = 10)
+```
+
+## Summarize as latex table
+
+```{r}
+df_coregene_pct <- dplyr::filter(pdx_compare_df, ensembl_gene_id %in% coregeneset_df$ensembl_gene_id) %>% 
+  group_by(cell_type) %>% 
+  summarise(pct_upreg = 100 * mean(logFC_pt > 0),
+            pct_upreg_signif = 100 * mean(logFC_pt > 0 & FDR_pt < 0.05))
+```
+
+```{r fig.width = 6, fig.height = 4}
+ggplot(df_coregene_pct, aes(y = pct_upreg, x = forcats::fct_reorder(cell_type, pct_upreg))) +
+  geom_bar(stat = 'identity') +
+  coord_flip() + 
+  labs(y = "% genes", x = "Cell type", 
+       subtitle = "% genes in PDX core digestion geneset upregulated \n in cell type in response to collagenase digestion") +
+  theme_paper()
+
+ggsave(params$s_pct_up, width = 6, height = 3)
+
+ggplot(df_coregene_pct, aes(y = pct_upreg_signif, x = forcats::fct_reorder(cell_type, pct_upreg_signif))) +
+  geom_bar(stat = 'identity') +
+  coord_flip() + 
+  labs(y = "% genes", x = "Cell type", 
+       subtitle = "% genes in PDX core digestion geneset significantly \n upregulated in cell type in response to collagenase digestion") +
+  theme_paper()
+
+ggsave(params$s_pct_up_signif, width = 6, height = 3)
+```
+
+```{r}
+df_coregene_pct_lt <- dplyr::rename(df_coregene_pct,
+                                    `Cell type` = cell_type,
+                                    `% upregulated` = pct_upreg,
+                                    `% significantly upregulated` = pct_upreg_signif)
+
+latex <- xtable(df_coregene_pct_lt,
+                caption = "% of genes in the 37C collagenase associated digestion core gene set identified using PDX upregulated and significantly upregulated in each primary tumour cell type",
+                label = NULL)
+
+
+
+print(latex, file = params$latex_core_csv, include.rownames = FALSE)
+```
+
+```{r}
+round1 <- function(x) format(round(x, 1), nsmall = 1)
+
+stats$min_pct_upreg <- min(df_coregene_pct$pct_upreg)
+stats$max_pct_upreg <- max(df_coregene_pct$pct_upreg)
+stats$min_pct_upreg_signif <- min(df_coregene_pct$pct_upreg_signif)
+stats$max_pct_upreg_signif <- max(df_coregene_pct$pct_upreg_signif)
+
+stats <- lapply(stats, round1)
+
+```
+
+
+
+## Continue on
 
 Define annotation data frame
 
@@ -164,10 +294,11 @@ ggplot(df_cg, aes(y = cell_type, x = forcats::fct_reorder(gene_symbol, -logFC), 
   theme_bw() +
   theme(legend.text = element_text(colour = 'black')) +
   scale_colour_manual(values = c("TRUE"="black", "FALSE"="grey90"), guide = FALSE) +
+  theme_paper() +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
         legend.position = "bottom") +
   scale_size(guide = FALSE) +
-  labs(x = "Digestion method associated gene", y = "Cell type")
+  labs(x = "Digestion method associated gene", y = "Cell type") 
 ```
 
 ```{r}
@@ -219,12 +350,16 @@ filter(dfp, pathway %in% retained_pathways) %>%
   ggplot(aes(x = cell_type, y = pathway)) +
   geom_point(aes(size = -log10(FDR), colour = Direction, alpha = significant)) +
   scale_alpha_manual(values = c("TRUE"=.8, "FALSE"=0), guide = FALSE) +
-    theme_bw() +
+  theme_bw() +
+  theme_paper() +
   theme(legend.text = element_text(colour = 'black')) +
+  theme(panel.grid.major = element_line(colour = "grey90")) +
   labs(x = "Cell type", y = "Pathway") +
   scale_colour_manual(values = c("Up"=scales::muted("red"),"Down"=scales::muted("blue"))) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
-        axis.text.y = element_text(size = 6))
+        axis.text.y = element_text(size = 5)) +
+  scale_y_discrete(expand = c(.04, 0))
+  # theme(plot.margin=unit(c(10,1,1.5,1.2),"cm"))
   
 ```
 
@@ -247,7 +382,7 @@ bottom_grid <- cowplot::plot_grid(de_grid, pathway_plot, nrow = 1, labels = c("D
 
 # What looks the same and what looks different
 
-```{r}
+```{r, eval=F}
 unique_ensembl <- unique(df$ensembl_gene_id)
 
 ensembl <- useMart("ensembl")
@@ -261,7 +396,7 @@ bm <- getBM(attributes = c("ensembl_gene_id", "hgnc_symbol"),
 dfs <- inner_join(df, bm)
 ```
 
-```{r fig.width = 6, fig.height = 6}
+```{r fig.width = 6, fig.height = 6, eval=F}
 
 dfs <- filter(dfs, !(cell_type %in% c("B cells", "Plasma cells", "other"))) 
 
@@ -285,7 +420,7 @@ top_n(dfv, 20, var_logFC) %>%
   labs(x = "Cell type", y = "log fold change, 37C collagenase vs 6C cold protease")
 ```
 
-```{r}
+```{r, eval=F}
 ggsave(params$sfig_varresp, width = 10, height = 8)
 ```
 
@@ -298,7 +433,7 @@ umap_figs <- readRDS(here(params$pt_umap))
 
 ```{r}
 main_plot <- plot_grid(plot_grid(NULL, NULL, nrow = 1, labels = c("A", "B")), 
-           umap_figs$umap_plot ,#+ consistent_theme(),
+           umap_figs$umap_plot + theme_paper(),
            bottom_grid,
            ncol = 1,
            labels = c("", "C", ""),
@@ -312,10 +447,16 @@ Save supplementary UMAP figure
 ```{r}
 umap_figs$prop_plot +
   cowplot::theme_cowplot(font_size = 11) +
-  consistent_theme() +
+  theme_paper() +
     theme(axis.text.x = element_text(size = 7, angle=-90, hjust=0, vjust=0.5),
           strip.text = element_text(size = 9, face='bold'))
 
 ggsave(params$sfig_props, width = 13, height = 4)
+```
+
+```{r}
+df_stat <- tibble(description = names(stats),
+                  statistic = unlist(stats))
+write_statistics(df_stat, file = params$stats)
 ```
 

@@ -35,10 +35,16 @@ all_figs['primary-tumour-de'] = expand("figs/differential-expression/primary_tum
                                        pb=pseudobulk)
 
 
-all_figs['primary-tumour-supp'] = ['figs/differential-expression/pt-var-response_v3_FALSE.png', 'figs/differential-expression/pt-props_v3_FALSE.png']
+all_figs['primary-tumour-supp'] = [#'figs/differential-expression/pt-var-response_v3_FALSE.png',
+    'figs/differential-expression/pt-props_v3_FALSE.png'] + \
+        ['figs/differential-expression/s-pt-cort_v3_FALSE.png',
+        'figs/differential-expression/s-pt-pct-upt_v3_FALSE.png',
+        'figs/differential-expression/s-pt-pct-up-signift_v3_FALSE.png']
+
 
 
 deliverables['coregene-df'] = ['data/deliverables/coregene_df-FALSE-v3.csv']
+deliverables['pt-coregene'] = ['latex/pt_coregene_pct_v3_FALSE.tex']
 
 rule pdx_de:
     params:
@@ -166,8 +172,13 @@ rule final_primary_tumour_differential_expression_figs:
         pathway="figs/primary-tumour-temp-de/pathway_{cv}_pseudobulk_{pb}.png",
         report="reports/primary-tumour-temp-de/collated_report_{cv}_pseudobulk_{pb}.html",
         fig="figs/differential-expression/primary_tumour_temp_de_{cv}_{pb}.png",
-        sfig_varresp='figs/differential-expression/pt-var-response_{cv}_{pb}.png',
-        sfig_props='figs/differential-expression/pt-props_{cv}_{pb}.png'
+        # sfig_varresp='figs/differential-expression/pt-var-response_{cv}_{pb}.png',
+        sfig_props='figs/differential-expression/pt-props_{cv}_{pb}.png',
+        pt_coregene_latex='latex/pt_coregene_pct_{cv}_{pb}.tex',
+        s_cor='figs/differential-expression/s-pt-cort_{cv}_{pb}.png',
+        s_pct_up='figs/differential-expression/s-pt-pct-upt_{cv}_{pb}.png',
+        s_pct_up_signif='figs/differential-expression/s-pt-pct-up-signift_{cv}_{pb}.png',
+        stats="data/statistics/pt_differential_expression_{pb}_{cv}.csv"
     shell:
         "Rscript -e \"rmarkdown::render('pipeline/differential-expression/primary_tumour_results.Rmd', \
         output_file='{params.curr_dir}/{output.report}', \
@@ -176,10 +187,14 @@ rule final_primary_tumour_differential_expression_figs:
         volcano_plot='{output.volcano}',\
         grid_plot='{output.grid}',\
         coregeneset_csv='{input.coregeneset_csv}',\
-        sfig_varresp='{output.sfig_varresp}',\
         sfig_props='{output.sfig_props}',\
         pt_umap='{input.pt_umap}',\
         pathway_plot='{output.pathway}',\
         output_fig='{output.fig}',\
         pdx_results='{input.pdx_results}',\
+        s_cor='{output.s_cor}',\
+        stats='{output.stats}',\
+        s_pct_up='{output.s_pct_up}',\
+        s_pct_up_signif='{output.s_pct_up_signif}',\
+        latex_core_csv='{output.pt_coregene_latex}',\
         pseudobulk='{wildcards.pb}'))\" "    
