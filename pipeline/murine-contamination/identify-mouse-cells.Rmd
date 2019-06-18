@@ -6,6 +6,7 @@ output:
 params:
   human_mouse_dir: '../../data/human-mouse-sces/filtered_temperature_rdata_v3'
   human_mouse_prop_file: 'output.csv'
+  stats: 'stats.csv'
 ---
 
 ```{r setup, include=FALSE}
@@ -204,6 +205,32 @@ dfs_grouped %>%
 
 ggsave(here("figs", "murine-contamination", "pct_cells_mouse.png"), width = 5, height = 8)
 ```
+
+Statistics
+
+```{r}
+mouse_count <- dplyr::filter(dfs, sample_type != "PDX") %>% 
+  group_by(is_mouse) %>% 
+  dplyr::summarise(n_mouse = n()) %>% 
+  ungroup()
+```
+
+```{r}
+round1 <- function(x) format(round(x, 1), nsmall = 1)
+
+stats <- list()
+
+stats$n_mouse_ptcl <- dplyr::filter(mouse_count, is_mouse == TRUE) %>% .$n_mouse
+stats$n_human_ptcl <- dplyr::filter(mouse_count, is_mouse == FALSE) %>% .$n_mouse
+stats$pct_mouse_ptcl <- with(stats, round1(100 * (n_mouse_ptcl) / (n_mouse_ptcl + n_human_ptcl)))
+```
+
+```{r}
+df_stat <- tibble(description = names(stats),
+                  statistic = unlist(stats))
+write_statistics(df_stat, file = params$stats)
+```
+
 
 ```{r fig.width = 10, fig.height = 12}
 ggplot(dfs, aes(x = total_counts_human, y = total_counts_mouse, colour = is_mouse)) +

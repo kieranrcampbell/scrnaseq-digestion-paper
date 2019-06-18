@@ -20,11 +20,13 @@ rule identify_human_mouse:
         human_mouse_input_sces
     output:
         all_figs['murine-contamination'][:-1],
-        csv=config['murine_contamination_csv']
+        csv=config['murine_contamination_csv'],
+        stats="data/statistics/murine_fp.csv"
     shell:
         "Rscript -e \"rmarkdown::render('pipeline/murine-contamination/identify-mouse-cells.Rmd', \
         knit_root_dir='{params.curr_dir}', \
         params=list(human_mouse_dir='{params.input_dir}',\
+        stats='{output.stats}',\
         human_mouse_prop_file='{output.csv}'))\" "
 
 rule collate_murine_stats:
