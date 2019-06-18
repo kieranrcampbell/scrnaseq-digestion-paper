@@ -42,6 +42,7 @@ all_figs['primary-tumour-supp'] = [#'figs/differential-expression/pt-var-respons
         'figs/differential-expression/s-pt-pct-upt_v3_FALSE.png',
         'figs/differential-expression/s-pt-pct-up-signift_v3_FALSE.png']
 
+all_figs['sa854-hsp'] = ["figs/differential-expression/hsp-upreg_FALSE_v3.png"]
 
 
 deliverables['coregene-df'] = ['data/deliverables/coregene_df-FALSE-v3.csv']
@@ -201,3 +202,13 @@ rule final_primary_tumour_differential_expression_figs:
         s_pct_up_signif='{output.s_pct_up_signif}',\
         latex_core_csv='{output.pt_coregene_latex}',\
         pseudobulk='{wildcards.pb}'))\" "    
+
+rule sa854_hsp_plot:
+    input:
+        coregene_path="data/deliverables/coregene_df-{pb}-{cv}.csv"
+    output:
+        output_fig="figs/differential-expression/hsp-upreg_{pb}_{cv}.png"
+    shell:
+        "Rscript pipeline/differential-expression/sa854-hsp-plot.R "
+        "--coregene_path {input} "
+        "--output_fig {output}"

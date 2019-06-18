@@ -1,1 +1,1 @@
-snakemake --use-singularity --singularity-args "-B /batchfx:/batchfx" --singularity-prefix /batchfx/docker/.singularity $1
+snakemake --use-singularity --singularity-args "-B /batchfx:/batchfx" --singularity-prefix /batchfx/docker/.singularity --keep-going $1
