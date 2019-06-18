@@ -28,7 +28,8 @@ final_fig_pdx = {
     'rds': 'figs/differential-expression/pdx_digestion_de_fig.rds'
     }
 
-all_figs['pdx-differential-expression'] = [final_fig_pdx['png']]
+all_figs['pdx-differential-expression'] = [final_fig_pdx['png']] + \
+                                          ['figs/differential-expression/pdx-pathway-membership-FALSE-v3.png']
 
 all_figs['primary-tumour-de'] = expand("figs/differential-expression/primary_tumour_temp_de_{cv}_{pb}.png",
                                        cv=cellranger_versions,
@@ -89,7 +90,8 @@ rule pdx_results:
         pathway="figs/pdx_temp_de/pathway_{cv}_pseudobulk_{pb}.rds",
         report="reports/pdx_temp_de/collated_report_{cv}_pseudobulk_{pb}.html",
         stats="data/statistics/coregeneset_{pb}_{cv}.csv",
-        coregene_df="data/deliverables/coregene_df-{pb}-{cv}.csv"
+        coregene_df="data/deliverables/coregene_df-{pb}-{cv}.csv",
+        pathway_membership_plot='figs/differential-expression/pdx-pathway-membership-{pb}-{cv}.png'
     shell:
         "Rscript -e \"rmarkdown::render('pipeline/differential-expression/pdx_results.Rmd', \
         output_file='{params.curr_dir}/{output.report}', \
@@ -101,6 +103,7 @@ rule pdx_results:
         volcano_plot='{output.volcano}',\
         grid_plot='{output.grid}',\
         pathway_plot='{output.pathway}',\
+        pathway_membership_plot='{output.pathway_membership_plot}',\
         pseudobulk='{wildcards.pb}'))\" "
 
 # Note - this is specifically written for CR v3 pseudobulk=FALSE

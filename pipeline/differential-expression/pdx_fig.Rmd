@@ -17,6 +17,7 @@ params:
 ```{r}
 library(tidyverse)
 library(here)
+library(org.Hs.eg.db)
 
 source(here("scripts/utils.R"))
 ```
@@ -95,5 +96,3 @@ ggsave(params$fig_png, width = 13, height = 8)
 
 saveRDS(last_plot(), params$fig_rds)
 ```
-
-

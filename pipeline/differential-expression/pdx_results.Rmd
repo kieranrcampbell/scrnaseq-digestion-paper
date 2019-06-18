@@ -7,7 +7,7 @@ output:
     toc_float: true
   html_notebook: default
 params:
-  input_rds: input.rds
+  input_rds: '../../data/pdx_temp_de/v3/DE_results_pseudobulk_FALSE.rds'
   cellranger_version: v3
   pseudobulk: FALSE
   volcano_plot: volcano.png
@@ -15,6 +15,7 @@ params:
   pathway_plot: pathway.png
   coregene_stats: coregene.stats
   coregene_csv: coregene.csv
+  pathway_membership_plot: pathplot.png
 ---
 
 
@@ -28,6 +29,7 @@ suppressPackageStartupMessages({
   library(ggrepel)
   library(org.Hs.eg.db)
   library(here)
+  library(forcats)
 })
 
 select <- dplyr::select
@@ -49,6 +51,7 @@ df <- results$edger_results
 
 df_pt <- results$camera_results
 ```
+
 
 # Data summaries
 
@@ -246,4 +249,56 @@ df_stat <- frame_data(
 
 write_statistics(df_stat, file = params$coregene_stats)
 ```
+
+
+
+# Pathway membership supplementary
+
+```{r}
+load(here("data/genesets/human_H_v5p2.rdata"))
+go_gs <- Hs.H
+
+entrezgene_ensembl_map <- as.list(org.Hs.egENSEMBL)
+
+map_ids <- function(entrezgenes) {
+  x <- unlist(entrezgene_ensembl_map[entrezgenes])
+  names(x) <- NULL
+  x
+}
+```
+
+```{r}
+go_gs_ensembl <- lapply(go_gs, map_ids)
+names(go_gs_ensembl) <- sub("HALLMARK_", "", names(go_gs_ensembl))
+```
+
+```{r}
+pathmem <- lapply(names(go_gs_ensembl), function(n) tibble(pathway = n, ensembl_gene_id = go_gs_ensembl[[n]])) %>% 
+  bind_rows()
+```
+
+```{r}
+pathmem <- inner_join(pathmem, coregene_df)
+
+pathmem <- dplyr::count(pathmem, pathway, name='n_genes_in_pathway') %>% 
+  inner_join(pathmem)
+
+pathmem <- dplyr::count(pathmem, ensembl_gene_id, name='n_pathways_of_gene') %>% 
+  inner_join(pathmem)
+
+```
+
+```{r}
+top_n(coregene_df, 40, (logFC)) %>% 
+  inner_join(pathmem) %>% 
+  ggplot(aes(y = fct_reorder(gene_symbol, n_pathways_of_gene), 
+                    x = fct_reorder(pathway, -n_genes_in_pathway))) +
+  geom_tile() +
+  labs(y = "Gene", x = "Pathway") +
+  theme_paper() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+
+ggsave(params$pathway_membership_plot, width = 6, height = 9)
+```
+
 
