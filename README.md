@@ -4,7 +4,8 @@
 
 | Directory | Purpose |
 | -- | -- |
-| data | Storage of raw & processed data | 
+| data | Storage of raw & processed data |
+| data/deliverables | Deliverable components incl. core gene set |
 | docker | Storage of docker image |
 | figs | Intermediate & final figures |
 | latex | Latex files of summary statistics and supplementary tables |
@@ -20,7 +21,7 @@
 
 | Version | Notes |
 | -- | -- |
-| ? | Initial paper submission |
+| v1.0 | Initial paper preprint & submission |
 
 ### Authors
 
