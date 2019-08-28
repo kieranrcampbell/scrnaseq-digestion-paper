@@ -241,12 +241,12 @@ gen_stats <- function(tt) {
   
   stats$total_genes <- nrow(tt)
   stats$total_signif <- nrow(tt_signif)
-  stats$pct_signif <- round2(100 * stats$total_signif / stats$total_genes)
+  stats$pct_signif <- round1(100 * stats$total_signif / stats$total_genes)
   stats$n_up <- dplyr::filter(tt_signif, logFC > 0) %>% nrow()
   stats$n_down <- dplyr::filter(tt_signif, logFC < 0) %>% nrow()
   
   stats$core_signif <- nrow(tt_core_signif)
-  stats$pct_core_signif <- round2(100 * stats$core_signif / length(coregenes))
+  stats$pct_core_signif <- round1(100 * stats$core_signif / length(coregenes))
   stats$n_core_up <- dplyr::filter(tt_core_signif, logFC > 0) %>% nrow()
   stats$n_core_down <- dplyr::filter(tt_core_signif, logFC < 0) %>% nrow()
   
@@ -268,7 +268,7 @@ df_stats <- bind_rows(
   gen_stats(tt_30min),
   gen_stats(tt_2hr),
   gen_stats(tt_collagenase),
-  tibble(description = "de_correlation_time_method", statistic = as.character(correlation_time_method))
+  tibble(description = "de_correlation_time_method", statistic = round1(correlation_time_method))
 )
 
 write_statistics(df_stats, file = params$output_stats)
