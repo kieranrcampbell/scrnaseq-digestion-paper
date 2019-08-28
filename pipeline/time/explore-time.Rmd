@@ -250,7 +250,11 @@ gen_stats <- function(tt) {
   stats$n_core_up <- dplyr::filter(tt_core_signif, logFC > 0) %>% nrow()
   stats$n_core_down <- dplyr::filter(tt_core_signif, logFC < 0) %>% nrow()
   
-  names(stats) <- paste0(names(stats), "_", tt$comparison[1])
+  comparison <- tt$comparison[1]
+  comparison <- gsub("2", "two", comparison)
+  comparison <- gsub("30", "thirty", comparison)
+  
+  names(stats) <- paste0(names(stats), "_", comparison)
   tibble(
     description = names(stats),
     statistic = unlist(stats)
