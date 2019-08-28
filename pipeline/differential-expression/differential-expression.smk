@@ -52,7 +52,7 @@ rule pdx_de:
     params:
         curr_dir=os.getcwd()
     input:
-        sces_qc
+        ancient(sces_qc)
     output:
         rds="data/pdx_temp_de/{cv}/DE_results_pseudobulk_{pb}.rds",
         report="reports/pdx_temp_de/pdx_temp_de_{cv}_pseudobulk_{pb}.html"

@@ -87,16 +87,15 @@ sces <- lapply(sces, function(sce) {
   if(!(sce$enzyme_mix[1] %in% c("collagenase", "cold_protease"))) {
     return(NULL)
   }
+  if(sce$batch_id[1] == "20190801") {
+    return(NULL) # These are the revision datasets, so don't want to do DE
+  }
   
   sce
 })
 
 sces[sapply(sces, is.null)] <- NULL
 ```
-
-
-Remove mouse cells:
-
 
 
 Collapse counts to temperature and patient specific

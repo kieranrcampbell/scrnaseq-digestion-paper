@@ -62,12 +62,15 @@ read_sce <- function(input_sce = "input",
   }
   
 
-  rowData(sce)$ensembl_gene_id <- rownames(sce)
+  rowData(sce)$ensembl_gene_id <- rowData(sce)$ID
+  rownames(sce) <- rowData(sce)$ID
   
   sce <- getBMFeatureAnnos(sce, filters = "ensembl_gene_id",
-  attributes = c("ensembl_gene_id", "hgnc_symbol", "entrezgene",
+  attributes = c("ensembl_gene_id", "hgnc_symbol", "entrezgene_id",
   "start_position", "end_position", "chromosome_name"),
   dataset = "hsapiens_gene_ensembl")
+  
+  rowData(sce)$entrezgene <- rowData(sce)$entrezgene_id
 
   
   # Calculate size factors

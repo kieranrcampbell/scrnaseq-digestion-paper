@@ -10,7 +10,8 @@ configfile: "private_config.yaml"
 # Construct data frame of samples
 df_inventory = pd.read_csv(config['sample_inventory_url']).dropna()
 
-assert df_inventory.shape[0] == 45
+print(df_inventory.shape)
+assert df_inventory.shape[0] == 53
 
 df_inventory.index = df_inventory['id']
 inventory_dict = df_inventory.to_dict('index')
@@ -42,6 +43,7 @@ include: 'pipeline/comparison-existing-10X/comparison-existing-10X.smk'
 
 include: 'pipeline/differential-expression/differential-expression.smk'
 
+include: 'pipeline/time/time.smk'
 
 rule all:
     input:
@@ -50,7 +52,7 @@ rule all:
         list(itertools.chain(*deliverables.values())),
 	list(statistics.values()),
 	config['statfile'],
-        config['ptfile']
+        config['ptfile'],
 
 
 rule collate_stats:

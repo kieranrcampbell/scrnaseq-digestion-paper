@@ -22,6 +22,8 @@ remove_mouse_cells <- function(sce) {
   
   col_data <- left_join(col_data, mouse_df, by = c("Barcode", "id"))
   
+  col_data <- replace_na(col_data, list(is_mouse = FALSE))
+  
   stopifnot(all.equal(col_data$Barcode, sce$Barcode))
   
   sce[, !col_data$is_mouse]
@@ -81,3 +83,10 @@ theme_paper <- function() {
         legend.text = element_text(size = 10, colour = "black")
   )
 }
+
+
+#' These functions round an input string 'x' to a desired
+#' number of decimal places
+round1 <- function(x) format(round(x, 1), nsmall = 1)
+round2 <- function(x) format(round(x, 2), nsmall = 2)
+roundn <- function(x, n = 2) format(round(x, n), nsmall = n)

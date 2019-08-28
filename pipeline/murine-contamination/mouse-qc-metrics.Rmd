@@ -51,9 +51,9 @@ sces <- lapply(sces, function(sce) {
   if(!(sce$digestion_temperature[1] %in% c(6, 37))) {
     return(NULL)
   }
-  if(sce$temp_de_comparison[1] == -1) { # Don't want this comparison in
-    return(NULL)
-  }
+  # if(sce$temp_de_comparison[1] == -1) { # Don't want this comparison in
+  #   return(NULL)
+  # }
   if(!(sce$enzyme_mix[1] %in% c("collagenase", "cold_protease"))) {
     return(NULL)
   }
@@ -73,6 +73,7 @@ Collapse counts to temperature and patient specific
 
 sces <- lapply(sces, function(sce) {
   rowData(sce)[,-c(1:2)] <- NULL
+  colData(sce)$digestion_time <- NULL
   reducedDims(sce) <- list()
   sce
 })
@@ -85,6 +86,7 @@ Remove mouse cells:
 ```{r}
 sce_nomouse <- remove_mouse_cells(sce)
 ```
+
 
 
 ```{r}
