@@ -1,0 +1,272 @@
+---
+title: "Time series analysis"
+output: html_notebook
+params:
+  output_fig: 'figs/final/time.png'
+  output_stats: output.csv
+---
+
+```{r}
+suppressPackageStartupMessages({
+  library(SingleCellExperiment)
+  library(scater)
+  library(tidyverse)
+  library(here)
+  library(scran)
+  library(ggrepel)
+})
+
+source(here("scripts/utils.R"))
+
+theme_set(theme_paper())
+
+```
+
+```{r}
+sce <- readRDS(here('data/time/time-sce.rds'))
+```
+
+
+```{r fig.width = 8, fig.height = 3}
+cd <- colData(sce) %>% 
+  as.data.frame() %>% 
+  dplyr::select(digestion_temperature, digestion_time, pct_counts_mito, total_counts, total_features_by_counts)
+
+cd_tidy <- gather(cd, metric, value, -starts_with("digestion"))
+
+ggplot(cd_tidy, aes(x = digestion_time, y = value, fill = digestion_temperature)) +
+  geom_boxplot(outlier.size = 0.5) +
+  facet_wrap(~ metric, scales = "free_y")
+```
+
+
+```{r fig.width = 8, fig.height = 3}
+cd <- colData(sce) %>% 
+  as.data.frame() %>% 
+  dplyr::select(digestion_temperature, digestion_time, pct_counts_mito, total_counts, total_features_by_counts)
+
+cd_tidy <- gather(cd, metric, value, -starts_with("digestion"))
+
+ggplot(cd_tidy, aes(x = digestion_time, fill = digestion_temperature)) +
+  geom_bar(position = "dodge") +
+  labs(x = "# cells")
+  
+```
+
+
+```{r}
+
+plotPCA(sce, colour_by = "digestion_temperature")
+plotPCA(sce, colour_by = "digestion_time")
+```
+
+
+
+# Exploratory plot of core geneset
+
+
+```{r}
+coregene_df <- read_csv(here("data/deliverables/coregene_df-FALSE-v3.csv"))
+coregenes <- coregene_df$ensembl_gene_id
+```
+
+
+```{r, fig.width = 5, fig.height = 4}
+lc <- t(as.matrix(logcounts(sce[coregenes,])))
+lc <- lc[, colSums(lc) > 0]
+lc <- as.data.frame(scale(lc))
+
+lc$digestion_time <- sce$digestion_time
+lc$digestion_temperature <- sce$digestion_temperature
+
+lc2 <- gather(lc, gene, expression, -starts_with("digestion")) %>% 
+  group_by(digestion_temperature, digestion_time, gene) %>% 
+  summarise(mean_expression = mean(expression),
+            lower = quantile(expression, 0.1),
+            upper = quantile(expression, 0.9)) %>% 
+  mutate(enzyme = case_when(
+    digestion_temperature == "6" ~ "Cold protease",
+    digestion_temperature == "37" ~ "Collagenase"
+  )) %>% 
+  ungroup() %>% 
+  mutate(enzymegene = paste(enzyme, gene))
+
+ggplot(lc2, aes(x = digestion_time, y = mean_expression)) +
+  geom_line(aes(group=enzymegene, colour = enzyme), size = .5, alpha = .2) +
+  # facet_wrap(~ enzyme, ncol = 1) +
+  # geom_point(size = 3) +
+  # scale_colour_brewer(palette = "Dark2", name = "Gene") +
+  labs(x = "Digestion time", y = "Mean normalized expression") +
+  scale_linetype_manual(name = "Digestion\nenzyme", values = c("Cold protease"=3,"Collagenase"=1)) +
+  theme(axis.text = element_text(colour='black', size = 10)) +
+  scale_colour_manual(name = "Enzyme", 
+                      values = c("Cold protease"=digestion_temp_colours()[['6']],
+                                                  "Collagenase"=digestion_temp_colours()[['37']])) +
+  # labs(subtitle="Core gene set") +
+  scale_x_discrete(expand = expand_scale(add = c(0,0.05))) +
+  theme(legend.position = c(0.06, 0.85)) + 
+  guides(colour = guide_legend(override.aes = list(alpha = 1)))
+```
+
+```{r}
+time_plot <- last_plot()
+```
+
+
+# Differential expression
+
+```{r}
+tt_2hr <- readRDS(here('data/time/time-de-2hr.rds'))
+tt_30min <- readRDS(here('data/time/time-de-30min.rds'))
+tt_collagenase <- readRDS(here('data/time/time-de-collagenase_2hvs30m.rds'))
+```
+
+```{r}
+
+coregene_colour <- "darkred"
+dummy_df = data_frame(x = 10, y = 0, z = "In core geneset")
+
+```
+
+```{r}
+make_plot <- function(tt, subtitle, y) {
+  
+
+df_annot <- top_n(tt, 10, abs(logFC))
+
+ggplot(tt, aes(x = logCPM, y = logFC)) +
+  geom_point(alpha = 0.3) +
+  geom_point(data = dplyr::filter(tt, ensembl_gene_id %in% coregenes), 
+             colour = coregene_colour,
+             alpha = 0.5) +
+  geom_point(data = dummy_df, 
+             aes(x = x, y = y, colour = z),
+             alpha = 0) +
+  scale_colour_manual(values = c("In core geneset"=coregene_colour)) +
+  guides(colour = guide_legend(override.aes = list(alpha = 1))) +
+  theme(legend.title = element_blank(),
+        legend.position = c(0.6, 0.1),
+        legend.box.background = element_rect(size = 0.1, colour = 'black')) +
+  labs(subtitle = subtitle, y = y) +
+  geom_label_repel(data = df_annot, aes(label = gene_symbol), size = 2.8)
+}
+```
+
+
+## DE plots
+
+```{r}
+tt <- tt_2hr
+
+
+make_plot(tt_2hr, 
+          subtitle = "2 hours only",
+          y = "logFC Collagenase vs cold protease")
+
+plot_2hr <- last_plot()
+
+make_plot(tt_30min, 
+          subtitle = "30 minutes only",
+          y = "logFC Collagenase vs cold protease")
+
+plot_30min <- last_plot()
+
+make_plot(tt_collagenase, 
+          subtitle = "Collagenase only",
+          y = "logFC 2 hour vs 30 minute digestion")
+
+plot_collageanse <- last_plot() + ylim(-1.2, 3.8) + xlim(6, 15)
+plot_collageanse
+```
+
+
+## Comparison
+
+```{r}
+tt_comp <- inner_join(
+  tt_2hr,
+  tt_collagenase, 
+  by = c("ensembl_gene_id", "gene_symbol"),
+  suffix = c("_2hr", "_collagenase")
+)
+```
+
+
+```{r}
+tt_annot <- dplyr::filter(tt_comp, logFC_2hr > 4 | logFC_collagenase > 2.6)
+
+ggplot(tt_comp, aes(x = logFC_2hr, y = logFC_collagenase)) +
+  geom_point(size = 1, alpha = 0.3) +
+  labs(x = "logFC, Collagenase vs cold protease\nat 2 hour digesiton",
+       y = "logFC, 2 hour vs 30 minute digestion,\nCollagenase only") +
+  geom_label_repel(data = tt_annot, aes(label = gene_symbol), size = 2.8)
+```
+
+```{r}
+comparison_plot <- last_plot()
+```
+
+```{r}
+correlation_time_method <- cor(tt_comp$logFC_2hr, tt_comp$logFC_collagenase)
+```
+
+
+# Overall plot
+
+
+```{r}
+upper_grid <- cowplot::plot_grid(NULL, time_plot, plot_collageanse, NULL, 
+                                 labels = c("", "A", "B", ""), 
+                                 rel_widths = c(.2, 2,1.3, .2),
+                                 nrow = 1)
+
+lower_grid <- cowplot::plot_grid(plot_30min, plot_2hr, comparison_plot,
+                                 nrow = 1, labels = c("C", "D", "E"))
+```
+
+```{r}
+cowplot::plot_grid(upper_grid, lower_grid, ncol = 1)
+
+ggsave(params$output_fig, width = 12, height = 8)
+```
+
+# Statistics
+
+```{r}
+gen_stats <- function(tt) {
+  tt <- dplyr::mutate(tt, in_core_geneset = ensembl_gene_id %in% coregenes)
+  tt_signif <- dplyr::filter(tt, FDR < 0.05)
+  tt_core_signif <- dplyr::filter(tt_signif, in_core_geneset)
+  stats <- list()
+  
+  stats$total_genes <- nrow(tt)
+  stats$total_signif <- nrow(tt_signif)
+  stats$pct_signif <- round2(100 * stats$total_signif / stats$total_genes)
+  stats$n_up <- dplyr::filter(tt_signif, logFC > 0) %>% nrow()
+  stats$n_down <- dplyr::filter(tt_signif, logFC < 0) %>% nrow()
+  
+  stats$core_signif <- nrow(tt_core_signif)
+  stats$pct_core_signif <- round2(100 * stats$core_signif / length(coregenes))
+  stats$n_core_up <- dplyr::filter(tt_core_signif, logFC > 0) %>% nrow()
+  stats$n_core_down <- dplyr::filter(tt_core_signif, logFC < 0) %>% nrow()
+  
+  names(stats) <- paste0(names(stats), "_", tt$comparison[1])
+  tibble(
+    description = names(stats),
+    statistic = unlist(stats)
+  )
+}
+```
+
+
+```{r}
+df_stats <- bind_rows(
+  gen_stats(tt_30min),
+  gen_stats(tt_2hr),
+  gen_stats(tt_collagenase),
+  tibble(description = "de_correlation_time_method", statistic = as.character(correlation_time_method))
+)
+
+write_statistics(df_stats, file = params$output_stats)
+```
+
