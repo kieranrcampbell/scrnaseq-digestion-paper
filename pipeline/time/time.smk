@@ -1,6 +1,6 @@
 
 
-comparisons = ['collagenase_2hvs30m', '2hr', '30min']
+comparisons = ['collagenase_2hvs30m', '2hr', '30min', 'coldprotease_2hvs30m']
 time_des = expand('data/time/time-de-{comparison}.rds',
                               comparison=comparisons)
 

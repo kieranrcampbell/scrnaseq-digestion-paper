@@ -63,6 +63,11 @@ time_de <- function(input_sce = "input.rds",
     x <- 1 * (sce2$digestion_time == "2hr")
   }
   
+  if(comparison == "coldprotease_2hvs30m") {
+    sce2 <- sce[, sce$digestion_temperature == "6" & sce$digestion_time %in% c("30min", "2hr")]
+    x <- 1 * (sce2$digestion_time == "2hr")
+  }
+  
   if(comparison == "2hr") {
     sce2 <- sce[, sce$digestion_time == "2hr"]
     x <- 1 * (sce2$digestion_temperature == "37")
@@ -71,6 +76,10 @@ time_de <- function(input_sce = "input.rds",
   if(comparison == "30min") {
     sce2 <- sce[, sce$digestion_time == "30min"]
     x <- 1 * (sce2$digestion_temperature == "37")
+  }
+  
+  if(is.null(sce2)) {
+    stop("Comparison not found!")
   }
   
   

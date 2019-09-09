@@ -119,6 +119,7 @@ time_plot <- last_plot()
 tt_2hr <- readRDS(here('data/time/time-de-2hr.rds'))
 tt_30min <- readRDS(here('data/time/time-de-30min.rds'))
 tt_collagenase <- readRDS(here('data/time/time-de-collagenase_2hvs30m.rds'))
+tt_coldprotease <- readRDS(here('data/time/time-de-coldprotease_2hvs30m.rds'))
 ```
 
 ```{r}
@@ -230,6 +231,7 @@ cowplot::plot_grid(upper_grid, lower_grid, ncol = 1)
 ggsave(params$output_fig, width = 12, height = 8)
 ```
 
+
 # Statistics
 
 ```{r}
@@ -250,6 +252,8 @@ gen_stats <- function(tt) {
   stats$n_core_up <- dplyr::filter(tt_core_signif, logFC > 0) %>% nrow()
   stats$n_core_down <- dplyr::filter(tt_core_signif, logFC < 0) %>% nrow()
   
+  stats$mean_logcpm_geneset <- dplyr::filter(tt, in_core_geneset) %>% .$logCPM %>% mean
+  
   comparison <- tt$comparison[1]
   comparison <- gsub("2", "two", comparison)
   comparison <- gsub("30", "thirty", comparison)
@@ -263,14 +267,21 @@ gen_stats <- function(tt) {
 ```
 
 
+
+
 ```{r}
 df_stats <- bind_rows(
   gen_stats(tt_30min),
   gen_stats(tt_2hr),
   gen_stats(tt_collagenase),
+  gen_stats(tt_coldprotease),
   tibble(description = "de_correlation_time_method", statistic = round1(correlation_time_method))
 )
+```
 
+
+
+```{r}
 write_statistics(df_stats, file = params$output_stats)
 ```
 
